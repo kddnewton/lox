@@ -24,34 +24,167 @@ class Lox
     def debug(source) = "#{type} #{source[index...(index + length)]} #{value.nil? ? "null" : value}"
   end
 
-  # A literal is a node that uses the running language's (Ruby) type system to
-  # represent a value in the lox language. Currently this means it holds
-  # booleans, nulls, strings, and numbers.
-  class Literal < Struct.new(:type, :value, keyword_init: true)
-    def debug
-      case type
-      in :TRUE | :FALSE | :NULL then type.downcase
-      in :STRING | :NUMBER then value.inspect
+  # A class that knows how to walk down the syntax tree.
+  class Visitor
+    def visit(node)
+      node&.accept(self)
+    end
+
+    def visit_all(nodes)
+      nodes.map { |node| visit(node) }
+    end
+
+    def visit_child_nodes(node)
+      visit_all(node.child_nodes)
+    end
+
+    # Visit a Binary node.
+    alias visit_binary visit_child_nodes
+
+    # Visit a Group node.
+    alias visit_group visit_child_nodes
+
+    # Visit a Literal node.
+    alias visit_literal visit_child_nodes
+
+    # Visit a Unary node.
+    alias visit_unary visit_child_nodes
+  end
+
+  # This is a visitor that will print the tree to a set of s-expressions that
+  # match what the book's test suite expects.
+  class DebugVisitor < Visitor
+    # Visit a Binary node.
+    def visit_binary(node)
+      "(#{OPERATORS_NAMES[node.type]} #{visit(node.left)} #{visit(node.right)})"
+    end
+
+    # Visit a Group node.
+    def visit_group(node)
+      "(group #{visit(node.node)})"
+    end
+
+    # Visit a Literal node.
+    def visit_literal(node)
+      case node.type
+      in :TRUE | :FALSE | :NULL then node.type.downcase
+      in :STRING | :NUMBER then node.value.inspect
       end
+    end
+
+    # Visit a Unary node.
+    def visit_unary(node)
+      "(#{OPERATORS_NAMES[node.type]} #{visit(node.node)})"
+    end
+  end
+
+  # This is the parent node of all of the nodes in the syntax tree. It provides
+  # common functionality like pretty printing.
+  class Node
+    def debug
+      DebugVisitor.new.visit(self)
+    end
+  end
+
+  # A binary node is a node that represents calling a binary operator between
+  # two other nodes in the source. It contains an operator and both child nodes.
+  class Binary < Node
+    attr_reader :type, :left, :right
+
+    def initialize(type:, left:, right:)
+      @type = type
+      @left = left
+      @right = right
+    end
+
+    def accept(visitor)
+      visitor.visit_binary(self)
+    end
+
+    def child_nodes
+      [left, right]
+    end
+
+    alias deconstruct child_nodes
+
+    def deconstruct_keys(keys)
+      { type: type, left: left, right: right }
     end
   end
 
   # A group is a node that holds another node. It is used to represent the use
   # of parentheses in the source code.
-  class Group < Struct.new(:node, keyword_init: true)
-    def debug = "(group #{node.debug})"
+  class Group < Node
+    attr_reader :node
+
+    def initialize(node:)
+      @node = node
+    end
+
+    def accept(visitor)
+      visitor.visit_group(self)
+    end
+
+    def child_nodes
+      [node]
+    end
+
+    alias deconstruct child_nodes
+
+    def deconstruct_keys(keys)
+      { node: node }
+    end
+  end
+
+  # A literal is a node that uses the running language's (Ruby) type system to
+  # represent a value in the lox language. Currently this means it holds
+  # booleans, nulls, strings, and numbers.
+  class Literal < Node
+    attr_reader :type, :value
+
+    def initialize(type:, value:)
+      @type = type
+      @value = value
+    end
+
+    def accept(visitor)
+      visitor.visit_literal(self)
+    end
+
+    def child_nodes
+      []
+    end
+
+    alias deconstruct child_nodes
+
+    def deconstruct_keys(keys)
+      { type: type, value: value }
+    end
   end
 
   # A unary node is a node that represents calling a unary operator on another
   # node. It contains an operator and the child node.
-  class Unary < Struct.new(:type, :node, keyword_init: true)
-    def debug = "(#{OPERATORS_NAMES[type]} #{node.debug})"
-  end
+  class Unary < Node
+    attr_reader :type, :node
 
-  # A binary node is a node that represents calling a binary operator between
-  # two other nodes in the source. It contains an operator and both child nodes.
-  class Binary < Struct.new(:type, :left, :right, keyword_init: true)
-    def debug = "(#{OPERATORS_NAMES[type]} #{left.debug} #{right.debug})"
+    def initialize(type:, node:)
+      @type = type
+      @node = node
+    end
+
+    def accept(visitor)
+      visitor.visit_unary(self)
+    end
+
+    def child_nodes
+      [node]
+    end
+
+    alias deconstruct child_nodes
+
+    def deconstruct_keys(keys)
+      { type: type, node: node }
+    end
   end
 
   def lex(source) = tokens(source).map { _1.debug(source) }
