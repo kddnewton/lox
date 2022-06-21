@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+# The suite is either passed in as the first argument to the script or defaults
+# to the "all" suite.
+SUITE=${1:-all}
+
+# Here we're getting a handle on a reference to the interpreter script. It's an
+# absolute path so it doesn't have trouble with the pushd/popd commands.
+INTERP=$PWD/rlox.rb
+
+# We're going to enter the book's repository because the dart tests must be run
+# at the root of the repository.
+pushd ../craftinginterpreters
+
+if [ "$SUITE" = "all" ]; then
+  # If the "all" suite is specified, we'll run all of the tests by looping
+  # through every suite.
+  SUITES=("chap04_scanning" "chap06_parsing")
+  for SUITE in ${SUITES[@]}; do
+    SUITE=$SUITE dart tool/bin/test.dart $SUITE --interpreter $INTERP
+  done
+else
+  # Otherwise we'll just run the one suite that was passed.
+  SUITE=$SUITE dart tool/bin/test.dart $SUITE --interpreter $INTERP
+fi
+
+# Here we're going to return to the current working directory so that we don't
+# accidentally modify it by running this script.
+popd
