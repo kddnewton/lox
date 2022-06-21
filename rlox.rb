@@ -39,171 +39,322 @@ class Lox
     end
   end
 
-  # A class that knows how to walk down the syntax tree.
-  class Visitor
-    def visit(node)
-      node&.accept(self)
+  # This module contains a list of constants that represent each of the types of
+  # precedence for the lox language.
+  module Precedence
+    NONE = 0
+    ASSIGNMENT = 1
+    OR = 2
+    AND = 3
+    EQUALITY = 4
+    COMPARISON = 5
+    TERM = 6
+    FACTOR = 7
+    UNARY = 8
+    CALL = 9
+    PRIMARY = 10
+
+    # This returns the precedence of the type of the given token when it is
+    # found in an infix position.
+    def self.infix_for(token)
+      case token.type
+      in :BANG_EQUAL | :EQUAL_EQUAL then EQUALITY
+      in :GREATER | :GREATER_EQUAL | :LESS | :LESS_EQUAL then COMPARISON
+      in :MINUS | :PLUS then TERM
+      in :SLASH | :STAR then FACTOR
+      else NONE
+      end
     end
-
-    def visit_all(nodes)
-      nodes.map { |node| visit(node) }
-    end
-
-    def visit_child_nodes(node)
-      visit_all(node.child_nodes)
-    end
-
-    # Visit a Binary node.
-    alias visit_binary visit_child_nodes
-
-    # Visit a Group node.
-    alias visit_group visit_child_nodes
-
-    # Visit a Literal node.
-    alias visit_literal visit_child_nodes
-
-    # Visit a Unary node.
-    alias visit_unary visit_child_nodes
   end
 
-  # This is a visitor that will print the tree to a set of s-expressions that
-  # match what the book's test suite expects.
-  class DebugVisitor < Visitor
-    # Visit a Binary node.
-    def visit_binary(node)
-      "(#{OPERATORS_NAMES[node.type]} #{visit(node.left)} #{visit(node.right)})"
-    end
-
-    # Visit a Group node.
-    def visit_group(node)
-      "(group #{visit(node.node)})"
-    end
-
-    # Visit a Literal node.
-    def visit_literal(node)
-      case node.type
-      in :TRUE | :FALSE | :NULL then node.type.downcase
-      in :STRING | :NUMBER then node.value.inspect
+  # This module contains the various types that are used in lox. In general we
+  # avoid using native Ruby types because we can end up calling methods on them
+  # that we don't want to support.
+  module Type
+    # This represents the false value.
+    class False
+      def to_lox
+        "false"
       end
     end
 
-    # Visit a Unary node.
-    def visit_unary(node)
-      "(#{OPERATORS_NAMES[node.type]} #{visit(node.node)})"
+    # This represents the null value.
+    class Null
+      def to_lox
+        "null"
+      end
+    end
+
+    # This represents a number. Lox makes no delineation between integers/
+    # floats/bignums/etc.
+    class Number
+      include Comparable
+
+      attr_reader :value
+
+      def initialize(value:)
+        @value = value
+      end
+
+      def deconstruct_keys(keys)
+        { value: value }
+      end
+
+      def to_lox
+        value % 1 == 0 ? value.to_i.to_s : value.to_s
+      end
+
+      #-------------------------------------------------------------------------
+      # Runtime methods
+      #-------------------------------------------------------------------------
+
+      def -@
+        Number.new(value: -value)
+      end
+
+      def +(other) = Number.new(value: value + number_value(other))
+      def -(other) = Number.new(value: value - number_value(other))
+      def *(other) = Number.new(value: value * number_value(other))
+      def /(other) = Number.new(value: value / number_value(other))
+
+      def <(other) = value < number_value(other) ? True.new : False.new
+      def <=(other) = value <= number_value(other) ? True.new : False.new
+      def >(other) = value > number_value(other) ? True.new : False.new
+      def >=(other) = value >= number_value(other) ? True.new : False.new
+      def ==(other) = value == number_value(other) ? True.new : False.new
+
+      private
+
+      def number_value(other)
+        raise TypeError, "#{other.class} is not a Number" unless other in Number
+        other.value
+      end
+    end
+
+    # This represents a string.
+    class String
+      attr_reader :value
+
+      def initialize(value:)
+        @value = value
+      end
+
+      def deconstruct_keys(keys)
+        { value: value }
+      end
+
+      def to_lox
+        value.inspect
+      end
+    end
+
+    # This represents the true value.
+    class True
+      def to_lox
+        "true"
+      end
     end
   end
 
-  # This is the parent node of all of the nodes in the syntax tree. It provides
-  # common functionality like pretty printing.
-  class Node
-    def debug
-      DebugVisitor.new.visit(self)
-    end
-  end
+  # This module contains the definitions of the nodes in the syntax tree, as
+  # well as the methods to walk over them.
+  module AST
+    # A class that knows how to walk down the syntax tree.
+    class Visitor
+      def visit(node)
+        node&.accept(self)
+      end
 
-  # A binary node is a node that represents calling a binary operator between
-  # two other nodes in the source. It contains an operator and both child nodes.
-  class Binary < Node
-    attr_reader :type, :left, :right
+      def visit_all(nodes)
+        nodes.map { |node| visit(node) }
+      end
 
-    def initialize(type:, left:, right:)
-      @type = type
-      @left = left
-      @right = right
-    end
+      def visit_child_nodes(node)
+        visit_all(node.child_nodes)
+      end
 
-    def accept(visitor)
-      visitor.visit_binary(self)
-    end
+      # Visit a Binary node.
+      alias visit_binary visit_child_nodes
 
-    def child_nodes
-      [left, right]
-    end
+      # Visit a Group node.
+      alias visit_group visit_child_nodes
 
-    alias deconstruct child_nodes
+      # Visit a Literal node.
+      alias visit_literal visit_child_nodes
 
-    def deconstruct_keys(keys)
-      { type: type, left: left, right: right }
-    end
-  end
-
-  # A group is a node that holds another node. It is used to represent the use
-  # of parentheses in the source code.
-  class Group < Node
-    attr_reader :node
-
-    def initialize(node:)
-      @node = node
+      # Visit a Unary node.
+      alias visit_unary visit_child_nodes
     end
 
-    def accept(visitor)
-      visitor.visit_group(self)
+    # This is a visitor that will print the tree to a set of s-expressions that
+    # match what the book's test suite expects.
+    class DebugVisitor < Visitor
+      # Visit a Binary node.
+      def visit_binary(node)
+        "(#{OPERATORS_NAMES[node.type]} #{visit(node.left)} #{visit(node.right)})"
+      end
+
+      # Visit a Group node.
+      def visit_group(node)
+        "(group #{visit(node.node)})"
+      end
+
+      # Visit a Literal node.
+      def visit_literal(node)
+        case node.value
+        in Type::True then "true"
+        in Type::False then "false"
+        in Type::Null then "null"
+        in Type::Number[value:] then value.inspect
+        in Type::String[value:] then value.inspect
+        end
+      end
+
+      # Visit a Unary node.
+      def visit_unary(node)
+        "(#{OPERATORS_NAMES[node.type]} #{visit(node.node)})"
+      end
     end
 
-    def child_nodes
-      [node]
+    # This is a visitor that will walk the tree and evaluate it.
+    class EvaluateVisitor < Visitor
+      # Visit a Binary node.
+      def visit_binary(node)
+        case node.type
+        in :BANG_EQUAL then visit(node.left) != visit(node.right)
+        in :EQUAL_EQUAL then visit(node.left) == visit(node.right)
+        in :GREATER then visit(node.left) > visit(node.right)
+        in :GREATER_EQUAL then visit(node.left) >= visit(node.right)
+        in :LESS then visit(node.left) < visit(node.right)
+        in :LESS_EQUAL then visit(node.left) <= visit(node.right)
+        in :MINUS then visit(node.left) - visit(node.right)
+        in :PLUS then visit(node.left) + visit(node.right)
+        in :SLASH then visit(node.left) / visit(node.right)
+        in :STAR then visit(node.left) * visit(node.right)
+        end
+      end
+
+      # Visit a Group node.
+      def visit_group(node)
+        visit(node.node)
+      end
+
+      # Visit a Literal node.
+      def visit_literal(node)
+        node.value
+      end
+
+      # Visit a Unary node.
+      def visit_unary(node)
+        case node.type
+        in :BANG then !visit(node.node)
+        in :MINUS then -visit(node.node)
+        end
+      end
     end
 
-    alias deconstruct child_nodes
+    # A binary node is a node that represents calling a binary operator between
+    # two other nodes in the source. It contains an operator and both child
+    # nodes.
+    class Binary
+      attr_reader :type, :left, :right
 
-    def deconstruct_keys(keys)
-      { node: node }
-    end
-  end
+      def initialize(type:, left:, right:)
+        @type = type
+        @left = left
+        @right = right
+      end
 
-  # A literal is a node that uses the running language's (Ruby) type system to
-  # represent a value in the lox language. Currently this means it holds
-  # booleans, nulls, strings, and numbers.
-  class Literal < Node
-    attr_reader :type, :value
+      def accept(visitor)
+        visitor.visit_binary(self)
+      end
 
-    def initialize(type:, value:)
-      @type = type
-      @value = value
-    end
+      def child_nodes
+        [left, right]
+      end
 
-    def accept(visitor)
-      visitor.visit_literal(self)
-    end
+      alias deconstruct child_nodes
 
-    def child_nodes
-      []
-    end
-
-    alias deconstruct child_nodes
-
-    def deconstruct_keys(keys)
-      { type: type, value: value }
-    end
-  end
-
-  # A unary node is a node that represents calling a unary operator on another
-  # node. It contains an operator and the child node.
-  class Unary < Node
-    attr_reader :type, :node
-
-    def initialize(type:, node:)
-      @type = type
-      @node = node
+      def deconstruct_keys(keys)
+        { type: type, left: left, right: right }
+      end
     end
 
-    def accept(visitor)
-      visitor.visit_unary(self)
+    # A group is a node that holds another node. It is used to represent the use
+    # of parentheses in the source code.
+    class Group
+      attr_reader :node
+
+      def initialize(node:)
+        @node = node
+      end
+
+      def accept(visitor)
+        visitor.visit_group(self)
+      end
+
+      def child_nodes
+        [node]
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { node: node }
+      end
     end
 
-    def child_nodes
-      [node]
+    # A literal is a node that holds a value from the Type module.
+    class Literal
+      attr_reader :value
+
+      def initialize(value:)
+        @value = value
+      end
+
+      def accept(visitor)
+        visitor.visit_literal(self)
+      end
+
+      def child_nodes
+        []
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { value: value }
+      end
     end
 
-    alias deconstruct child_nodes
+    # A unary node is a node that represents calling a unary operator on another
+    # node. It contains an operator and the child node.
+    class Unary
+      attr_reader :type, :node
 
-    def deconstruct_keys(keys)
-      { type: type, node: node }
+      def initialize(type:, node:)
+        @type = type
+        @node = node
+      end
+
+      def accept(visitor)
+        visitor.visit_unary(self)
+      end
+
+      def child_nodes
+        [node]
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { type: type, node: node }
+      end
     end
   end
 
   def lex(source) = tokens(source).map { _1.debug(source) }
-  def parse(source) = parse_precedence(tokens(source), Precedence::ASSIGNMENT).debug
+  def parse(source) = parse_precedence(tokens(source), Precedence::ASSIGNMENT)
 
   private
 
@@ -236,54 +387,32 @@ class Lox
     end
   end
 
-  # This module contains a list of constants that represent each of the types of
-  # precedence for the lox language.
-  module Precedence
-    NONE = 0
-    ASSIGNMENT = 1
-    OR = 2
-    AND = 3
-    EQUALITY = 4
-    COMPARISON = 5
-    TERM = 6
-    FACTOR = 7
-    UNARY = 8
-    CALL = 9
-    PRIMARY = 10
-
-    # This returns the precedence of the type of the given token when it is
-    # found in an infix position.
-    def self.infix_for(token)
-      case token.type
-      in :BANG_EQUAL | :EQUAL_EQUAL then EQUALITY
-      in :GREATER | :GREATER_EQUAL | :LESS | :LESS_EQUAL then COMPARISON
-      in :MINUS | :PLUS then TERM
-      in :SLASH | :STAR then FACTOR
-      else NONE
-      end
-    end
-  end
-
   # This parses an expression at or above the current level of precedence. It is
   # an implementation of Pratt parsing.
   def parse_precedence(tokens, precedence)
     node =
       case tokens.next
       in { type: :BANG | :MINUS => type }
-        Unary.new(type: type, node: parse_precedence(tokens, Precedence::UNARY))
+        AST::Unary.new(type: type, node: parse_precedence(tokens, Precedence::UNARY))
       in { type: :LEFT_PAREN }
-        Group.new(node: parse_precedence(tokens, Precedence::ASSIGNMENT)).tap do
+        AST::Group.new(node: parse_precedence(tokens, Precedence::ASSIGNMENT)).tap do
           tokens.next => { type: :RIGHT_PAREN }
         end
-      in { type: :TRUE | :FALSE => type }
-        Literal.new(type: :TRUE, value: type == :TRUE)
-      in { type: :NULL | :STRING | :NUMBER => type, value: }
-        Literal.new(type: type, value: value)
+      in { type: :TRUE }
+        AST::Literal.new(value: Type::True.new)
+      in { type: :FALSE }
+        AST::Literal.new(value: Type::False.new)
+      in { type: :NULL }
+        AST::Literal.new(value: Type::Null.new)
+      in { type: :NUMBER, value: }
+        AST::Literal.new(value: Type::Number.new(value: value))
+      in { type: :STRING, value: }
+        AST::Literal.new(value: Type::String.new(value: value))
       end
 
     while (infix = Precedence.infix_for(tokens.peek)) && (precedence <= infix)
       token = tokens.next
-      node = Binary.new(type: token.type, left: node, right: parse_precedence(tokens, infix + 1))
+      node = AST::Binary.new(type: token.type, left: node, right: parse_precedence(tokens, infix + 1))
     end
 
     node
@@ -291,6 +420,7 @@ class Lox
 end
 
 case ENV["SUITE"]
-when "chap04_scanning" then puts Lox.new.lex(File.read(ARGV.first))
-when "chap06_parsing" then puts Lox.new.parse(File.read(ARGV.first))
+in "chap04_scanning" then puts Lox.new.lex(File.read(ARGV.first))
+in "chap06_parsing" then puts Lox.new.parse(File.read(ARGV.first)).accept(Lox::AST::DebugVisitor.new)
+in "chap07_evaluating" then puts Lox.new.parse(File.read(ARGV.first)).accept(Lox::AST::EvaluateVisitor.new).to_lox
 end
