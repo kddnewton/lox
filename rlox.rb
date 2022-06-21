@@ -59,12 +59,14 @@ class Lox
 
   private
 
+  # This takes a source string and converts it into an enumerator that will
+  # yield out one token at a time.
   def tokens(source)
     Enumerator.new do |enum|
       index = 0
 
-      until source.empty?
-        case source
+      while index < source.length
+        case source[index..]
         in /\A(\/\/[^\n]*|\s+)/
           # skip whitespace and comments
         in /\A([(){},\.\-+;*\/]|[!=><]=?)/
@@ -80,7 +82,6 @@ class Lox
         end
 
         index += $&.length
-        source = $'
       end
 
       enum << Token.new(type: :EOF, index:, length: 0)
