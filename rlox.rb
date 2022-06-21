@@ -20,8 +20,23 @@ class Lox
   OPERATORS_NAMES = OPERATORS.invert
 
   # A token is a representation of a single lexical unit in the source code.
-  class Token < Struct.new(:type, :index, :length, :value, keyword_init: true)
-    def debug(source) = "#{type} #{source[index...(index + length)]} #{value.nil? ? "null" : value}"
+  class Token
+    attr_reader :type, :index, :length, :value
+
+    def initialize(type:, value:, index:, length:)
+      @type = type
+      @value = value
+      @index = index
+      @length = length
+    end
+
+    def debug(source)
+      "#{type} #{source[index...(index + length)]} #{value.nil? ? "null" : value}"
+    end
+
+    def deconstruct_keys(keys)
+      { type: type, value: value, index: index, length: length }
+    end
   end
 
   # A class that knows how to walk down the syntax tree.
@@ -188,7 +203,7 @@ class Lox
   end
 
   def lex(source) = tokens(source).map { _1.debug(source) }
-  def parse(source) = expression(tokens(source)).debug
+  def parse(source) = parse_precedence(tokens(source), Precedence::ASSIGNMENT).debug
 
   private
 
@@ -204,53 +219,74 @@ class Lox
           # skip whitespace and comments
         in /\A([(){},\.\-+;*\/]|[!=><]=?)/
           type = OPERATORS[$&]
-          enum << Token.new(type:, index:, length: $&.length)
+          enum << Token.new(type: type, index: index, length: $&.length, value: nil)
         in /\A"([^"]*)"/
-          enum << Token.new(type: :STRING, index:, length: $&.length, value: $&[1...-1])
+          enum << Token.new(type: :STRING, index: index, length: $&.length, value: $&[1...-1])
         in /\A\d+(\.\d+)?/
-          enum << Token.new(type: :NUMBER, index:, length: $&.length, value: $&.to_f)
+          enum << Token.new(type: :NUMBER, index: index, length: $&.length, value: $&.to_f)
         in /\A[a-z_][A-Za-z0-9_]*/
           type = KEYWORDS.include?($&) ? $&.upcase.to_sym : :IDENTIFIER
-          enum << Token.new(type:, index:, length: $&.length)
+          enum << Token.new(type: type, index: index, length: $&.length, value: nil)
         end
 
         index += $&.length
       end
 
-      enum << Token.new(type: :EOF, index:, length: 0)
+      enum << Token.new(type: :EOF, index: index, length: 0, value: nil)
     end
   end
 
-  def binary(enum, types, &parse)
-    node = parse.call(enum)
-    while types.include?(enum.peek.type)
-      node = Binary.new(type: enum.next.type, left: node, right: parse.call(enum))
+  # This module contains a list of constants that represent each of the types of
+  # precedence for the lox language.
+  module Precedence
+    NONE = 0
+    ASSIGNMENT = 1
+    OR = 2
+    AND = 3
+    EQUALITY = 4
+    COMPARISON = 5
+    TERM = 6
+    FACTOR = 7
+    UNARY = 8
+    CALL = 9
+    PRIMARY = 10
+
+    # This returns the precedence of the type of the given token when it is
+    # found in an infix position.
+    def self.infix_for(token)
+      case token.type
+      in :BANG_EQUAL | :EQUAL_EQUAL then EQUALITY
+      in :GREATER | :GREATER_EQUAL | :LESS | :LESS_EQUAL then COMPARISON
+      in :MINUS | :PLUS then TERM
+      in :SLASH | :STAR then FACTOR
+      else NONE
+      end
     end
-  
+  end
+
+  # This parses an expression at or above the current level of precedence. It is
+  # an implementation of Pratt parsing.
+  def parse_precedence(tokens, precedence)
+    node =
+      case tokens.next
+      in { type: :BANG | :MINUS => type }
+        Unary.new(type: type, node: parse_precedence(tokens, Precedence::UNARY))
+      in { type: :LEFT_PAREN }
+        Group.new(node: parse_precedence(tokens, Precedence::ASSIGNMENT)).tap do
+          tokens.next => { type: :RIGHT_PAREN }
+        end
+      in { type: :TRUE | :FALSE => type }
+        Literal.new(type: :TRUE, value: type == :TRUE)
+      in { type: :NULL | :STRING | :NUMBER => type, value: }
+        Literal.new(type: type, value: value)
+      end
+
+    while (infix = Precedence.infix_for(tokens.peek)) && (precedence <= infix)
+      token = tokens.next
+      node = Binary.new(type: token.type, left: node, right: parse_precedence(tokens, infix + 1))
+    end
+
     node
-  end
-
-  def expression(enum) = equality(enum)
-  def equality(enum) = binary(enum, %i[BANG_EQUAL EQUAL_EQUAL], &method(:comparison))
-  def comparison(enum) = binary(enum, %i[GREATER GREATER_EQUAL LESS LESS_EQUAL], &method(:term))
-  def term(enum) = binary(enum, %i[MINUS PLUS], &method(:factor))
-  def factor(enum) = binary(enum, %i[SLASH STAR], &method(:unary))
-
-  def unary(enum)
-    if enum.peek in { type: :BANG | :MINUS => type }
-      Unary.new(type:, node: unary(enum.tap(&:next)))
-    else
-      primary(enum)
-    end
-  end
-
-  def primary(enum)
-    case enum.next
-    in { type: :TRUE | :FALSE => type, value: } then Literal.new(type:, value: type == :TRUE)
-    in { type: :NULL | :STRING | :NUMBER => type, value: } then Literal.new(type:, value:)
-    in { type: :LEFT_PAREN }
-      Group.new(node: expression(enum).tap { enum.next => { type: :RIGHT_PAREN } })
-    end
   end
 end
 
