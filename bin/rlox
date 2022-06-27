@@ -9,7 +9,7 @@ suite = ENV.fetch("SUITE", "chap08_statements")
 
 case suite
 in "chap04_scanning"
-  Lox::Lexer.new(source).each do |token|
+  Lox::Lexer.lex(source).each do |token|
     value =
       case token
       in { type: :NUMBER, value: }
@@ -25,12 +25,16 @@ in "chap04_scanning"
     puts "#{token.type} #{source[token.location.range]} #{value}"
   end
 in "chap06_parsing"
-  puts Lox::Parser.new.parse_expression(Lox::Lexer.new(source)).accept(Lox::Visitor::DebugVisitor.new)
+  puts Lox::Parser.new.parse_expression(Lox::Lexer.lex(source)).accept(Lox::Visitor::DebugVisitor.new)
 in "chap07_evaluating"
-  puts Lox::Parser.new.parse_expression(Lox::Lexer.new(source)).accept(Lox::Visitor::EvaluateVisitor.new).to_lox
+  puts Lox::Parser.new.parse_expression(Lox::Lexer.lex(source)).accept(Lox::Visitor::EvaluateVisitor.new).to_lox
 in "chap08_statements"
   begin
-    Lox::Parser.new.parse(source).accept(Lox::Visitor::EvaluateVisitor.new)
+    parser = Lox::Parser.new
+    program = parser.parse(source)
+    raise parser.errors.first if parser.errors.any?
+
+    program.accept(Lox::Visitor::EvaluateVisitor.new)
   rescue Lox::Error::SyntaxError => error
     warn(error.detailed_message(source: source))
     exit 65

@@ -35,9 +35,15 @@ module Lox
       end
     end
 
+    attr_reader :errors
+
+    def initialize
+      @errors = []
+    end
+
     # This parses a source string and returns the correspond syntax tree.
     def parse(source)
-      parse_program(Lexer.new(source))
+      parse_program(Lexer.lex(source))
     end
 
     # This parses an expression at or above the current level of precedence. It is
@@ -64,6 +70,9 @@ module Lox
           AST::Literal.new(value: Type::String.new(value: value), location: location)
         in { type: :IDENTIFIER, value:, location: }
           AST::Variable.new(name: value, location: location)
+        in { value:, location: }
+          errors << Error::SyntaxError.new("Error at '#{value}': Expect expression.", location)
+          return synchronize(tokens, location)
         end
 
       while (infix = Precedence.infix_for(tokens.peek)) && (precedence <= infix)
@@ -72,13 +81,15 @@ module Lox
           if token.type == :EQUAL
             case node
             in AST::Variable
-              value = parse_expression(tokens, infix)
-              AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
+              # do nothing, this is what we want
             in AST::Literal[value: Type::True | Type::False | Type::Nil => value]
-              raise Error::SyntaxError.new("Error at '#{value.to_lox}': Expect variable name.", node.location)
+              errors << Error::SyntaxError.new("Error at '#{value.to_lox}': Expect variable name.", node.location)
             else
-              raise Error::SyntaxError.new("Error at '#{token.value}': Invalid assignment target.", token.location)
+              errors << Error::SyntaxError.new("Error at '#{token.value}': Invalid assignment target.", token.location)
             end
+
+            value = parse_expression(tokens, infix)
+            AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
           else
             right = parse_expression(tokens, infix + 1)
             AST::Binary.new(left: node, operator: token, right: right, location: node.location.to(right.location))
@@ -89,6 +100,36 @@ module Lox
     end
 
     private
+
+    def consume(tokens, type)
+      peeked = tokens.peek
+
+      if peeked in { type: ^type }
+        tokens.next
+      else
+        errors << Error::SyntaxError.new("Error at '#{peeked.value}': Expect '#{type}'.", peeked.location)
+        AST::Token.new(type: :MISSING, location: peeked.location, value: nil)
+      end
+    end
+
+    # This is the synchronization mechanism. If we've found something that we
+    # don't explicitly handle, skip forward until we find something that looks
+    # right.
+    def synchronize(tokens, location)
+      loop do
+        case tokens.peek
+        in { type: :EOF }
+          return AST::Missing.new(location: location)
+        in { type: :SEMICOLON }
+          tokens.next
+          return AST::Missing.new(location: location)
+        in { type: :CLASS | :FOR | :FUN | :IF | :PRINT | :RETURN | :VAR | :WHILE }
+          return AST::Missing.new(location: location)
+        else
+          tokens.next
+        end
+      end
+    end
 
     def parse_program(tokens)
       statements = []
@@ -110,11 +151,21 @@ module Lox
     end
 
     def parse_var_declaration(tokens)
-      keyword = tokens.consume(:VAR)
-      identifier = tokens.consume(:IDENTIFIER)
+      keyword = consume(tokens, :VAR)
 
-      initializer = parse_expression(tokens) if tokens.match(:EQUAL)
-      semicolon = tokens.consume(:SEMICOLON)
+      if tokens.peek in { type: :FALSE | :NIL | :THIS | :TRUE, value:, location: }
+        errors << Error::SyntaxError.new("Error at '#{value}': Expect variable name.", location)
+        return synchronize(tokens, location)
+      end
+
+      identifier = consume(tokens, :IDENTIFIER)
+
+      if tokens.peek in { type: :EQUAL }
+        tokens.next
+        initializer = parse_expression(tokens)
+      end
+
+      semicolon = consume(tokens, :SEMICOLON)
     
       AST::VariableDeclaration.new(
         name: identifier.value,
@@ -135,9 +186,9 @@ module Lox
     end
 
     def parse_print_statement(tokens)
-      keyword = tokens.consume(:PRINT)
+      keyword = consume(tokens, :PRINT)
       value = parse_expression(tokens)
-      semicolon = tokens.consume(:SEMICOLON)
+      semicolon = consume(tokens, :SEMICOLON)
 
       AST::PrintStatement.new(
         value: value,
@@ -146,11 +197,11 @@ module Lox
     end
 
     def parse_block_statement(tokens)
-      lbrace = tokens.consume(:LEFT_BRACE)
+      lbrace = consume(tokens, :LEFT_BRACE)
 
       statements = []
       statements << parse_declaration(tokens) until tokens.peek in { type: :EOF | :RIGHT_BRACE }
-      rbrace = tokens.consume(:RIGHT_BRACE)
+      rbrace = consume(tokens, :RIGHT_BRACE)
 
       AST::BlockStatement.new(
         statements: statements,
@@ -160,7 +211,7 @@ module Lox
 
     def parse_expression_statement(tokens)
       value = parse_expression(tokens)
-      semicolon = tokens.consume(:SEMICOLON)
+      semicolon = consume(tokens, :SEMICOLON)
 
       AST::Expression.new(
         value: value,

@@ -4,7 +4,7 @@ module Lox
   # This class is responsible for converting a source string into a stream of
   # tokens. It has some extra functionality to provide missing tokens if
   # necessary.
-  class Lexer
+  module Lexer
     # A list of strings that represent all of the keywords in the language.
     KEYWORDS = %w[and class else false fun for if nil or print return super this true var while]
 
@@ -17,41 +17,7 @@ module Lox
       ">=" => :GREATER_EQUAL, "<" => :LESS, "<=" => :LESS_EQUAL
     }
 
-    attr_reader :tokens
-
-    def initialize(source)
-      @tokens = lex(source)
-    end
-
-    def consume(type)
-      peeked = peek
-
-      if peeked in { type: ^type }
-        self.next
-      else
-        AST::Token.new(type: :MISSING, location: peeked.location, value: nil)
-      end
-    end
-
-    def each(&)
-      tokens.each(&)
-    end
-
-    def match(type)
-      self.next if peek in { type: ^type }
-    end
-
-    def next
-      tokens.next
-    end
-
-    def peek
-      tokens.peek
-    end
-
-    private
-
-    def lex(source)
+    def self.lex(source)
       Enumerator.new do |enum|
         index = 0
   

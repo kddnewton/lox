@@ -35,6 +35,9 @@ module Lox
       # Visit a Literal node.
       alias visit_literal visit_child_nodes
 
+      # Visit a Missing node.
+      alias visit_missing visit_child_nodes
+
       # Visit a Print node.
       alias visit_print_statement visit_child_nodes
 

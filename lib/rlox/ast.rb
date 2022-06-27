@@ -189,6 +189,30 @@ module Lox
       end
     end
 
+    # This is a very special node in the tree that represents when a node was
+    # expected but was not found.
+    class Missing
+      attr_reader :location
+
+      def initialize(location:)
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_missing(self)
+      end
+
+      def child_nodes
+        []
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { location: location }
+      end
+    end
+
     # This represents a print statement.
     class PrintStatement
       attr_reader :value, :location

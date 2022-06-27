@@ -94,6 +94,11 @@ module Lox
         node.value
       end
 
+      # Visit a Missing node.
+      def visit_missing(node)
+        raise
+      end
+
       # Visit a Print node.
       def visit_print_statement(node)
         puts visit(node.value).to_lox
