@@ -26,6 +26,9 @@ module Lox
       # Visit a BlockStatement node.
       alias visit_block_statement visit_child_nodes
 
+      # Visit a Call node.
+      alias visit_call visit_child_nodes
+
       # Visit an Expression node.
       alias visit_expression visit_child_nodes
 

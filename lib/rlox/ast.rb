@@ -116,6 +116,32 @@ module Lox
       end
     end
 
+    # This represents a function call.
+    class Call
+      attr_reader :callee, :left_paren, :arguments_location, :location
+
+      def initialize(callee:, left_paren:, arguments_location:, location:)
+        @callee = callee
+        @left_paren = left_paren
+        @arguments_location = arguments_location
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_call(self)
+      end
+
+      def child_nodes
+        [callee, *arguments]
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { callee: callee, arguments: arguments, arguments_location: arguments_location, location: location }
+      end
+    end
+
     # This represents an expression to be executed.
     class Expression
       attr_reader :value, :location

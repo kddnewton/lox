@@ -25,6 +25,19 @@ module Lox
         end
       end
 
+      # Visit a Call node.
+      def visit_call(node)
+        group("call") do
+          q.breakable
+          visit(node.callee)
+
+          if node.arguments.any?
+            q.breakable
+            q.seplist(node.arguments) { |argument| visit(argument) }
+          end
+        end
+      end
+
       # Visit a ForStatement node.
       def visit_for_statement(node)
         group("for") do

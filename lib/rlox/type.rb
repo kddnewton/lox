@@ -6,6 +6,10 @@ module Lox
     # on any kind of value. So here we're going to prepare base implementations
     # that just raise.
     class Object
+      def callable?
+        false
+      end
+
       def truthy?
         true
       end

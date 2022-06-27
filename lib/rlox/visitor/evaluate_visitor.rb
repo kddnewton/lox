@@ -5,11 +5,12 @@ module Lox
     # This is a visitor that will walk the tree and evaluate it.
     class EvaluateVisitor < BaseVisitor
       class Environment
-        attr_reader :parent, :variables
+        attr_reader :parent, :variables, :functions
 
-        def initialize(parent)
+        def initialize(parent:, functions:)
           @parent = parent
           @variables = {}
+          @functions = functions
         end
 
         def declare(node, value)
@@ -37,10 +38,27 @@ module Lox
         end
       end
 
+      class Function
+        attr_reader :arity, :callable
+
+        def initialize(arity:, &callable)
+          @arity = arity
+          @callable = callable
+        end
+
+        def call(*arguments)
+          callable.call(*arguments)
+        end
+      end
+
       attr_reader :environment
 
       def initialize
-        @environment = Environment.new(nil)
+        functions = {
+          clock: Function.new(arity: 0) { Type::Number.new(value: Time.now.to_i / 1000) }
+        }
+
+        @environment = Environment.new(parent: nil, functions: functions)
       end
 
       # Visit an Assignment node.
@@ -85,13 +103,27 @@ module Lox
       # Visit a BlockStatement node.
       def visit_block_statement(node)
         parent = environment
-        @environment = Environment.new(parent)
+        @environment = Environment.new(parent: parent)
 
         begin
           visit_all(node.statements)
           Type::Nil.instance
         ensure
           @environment = parent
+        end
+      end
+
+      # Visit a Call node.
+      def visit_call(node)
+        callee = visit(node.callee)
+        arguments = node.arguments.map { |argument| visit(argument) }
+
+        if !callee.callable?
+          raise Error::RuntimeError.new("Can only call functions and classes.", node.location)
+        elsif callee.arity != arguments.size
+          raise Error::RuntimeError.new("Expected #{callee.arity} arguments but got #{arguments.size}.", node.arguments_location)
+        else
+          callee.call(self, arguments)
         end
       end
 

@@ -30,10 +30,13 @@ module Lox
         in :GREATER | :GREATER_EQUAL | :LESS | :LESS_EQUAL then COMPARISON
         in :MINUS | :PLUS then TERM
         in :SLASH | :STAR then FACTOR
+        in :LEFT_PAREN then CALL
         else NONE
         end
       end
     end
+
+    MAXIMUM_ARGUMENTS = 255
 
     attr_reader :errors
 
@@ -88,7 +91,8 @@ module Lox
       while (infix = Precedence.infix_for(tokens.peek)) && (precedence <= infix)
         token = tokens.next
         node =
-          if token.type == :EQUAL
+          case token
+          in { type: :EQUAL }
             case node
             in AST::Variable
               # do nothing, this is what we want
@@ -100,6 +104,26 @@ module Lox
 
             value = parse_expression(tokens, infix)
             AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
+          in { type: :LEFT_PAREN, location: arguments_location }
+            arguments = []
+
+            if !(tokens.peek in { type: :RIGHT_PAREN })
+              exceeding = nil
+
+              loop do
+                exceeding ||= tokens.peek if arguments.length >= MAXIMUM_ARGUMENTS
+                arguments << parse_expression(tokens)
+                break unless tokens.peek in { type: :COMMA }
+                tokens.next
+              end
+
+              if exceeding
+                errors << Error::SyntaxError.new("Can't have more than 255 arguments.", exceeding.location)
+              end
+            end
+
+            rparen = consume(tokens, :RIGHT_PAREN, "Expected ')' after arguments.")
+            AST::Call.new(callee: node, arguments: arguments, arguments_location: arguments_location, location: node.location.to(rparen.location))
           else
             right = parse_expression(tokens, infix + 1)
             AST::Binary.new(left: node, operator: token, right: right, location: node.location.to(right.location))
