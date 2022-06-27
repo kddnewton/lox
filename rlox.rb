@@ -1,6 +1,9 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require "bigdecimal"
+require "bigdecimal/util"
+
 # The top-level class that provides all of the functionality of the language.
 class Lox
   # A list of strings that represent all of the keywords in the language.
@@ -29,6 +32,12 @@ class Lox
     # This error occurs during parsing when a token is not recognized or not
     # properly formed.
     class SyntaxError < Error
+      attr_reader :location
+
+      def initialize(message, location = nil)
+        super(message)
+        @location = location
+      end
     end
 
     # This is an error that occurs when a lox error is raised.
@@ -81,7 +90,7 @@ class Lox
         @instance ||= new
       end
 
-      def to_s
+      def to_lox
         "false"
       end
 
@@ -104,7 +113,7 @@ class Lox
         @instance ||= new
       end
 
-      def to_s
+      def to_lox
         "nil"
       end
 
@@ -134,8 +143,10 @@ class Lox
         { value: value }
       end
 
-      def to_s
-        value % 1 == 0 ? value.to_i.to_s : value.to_s
+      def to_lox
+        sign = value.sign >= 0 ? "" : "-"
+        nums = value % 1 == 0 ? value.abs.to_i : value.abs.to_s("F")
+        "#{sign}#{nums}"
       end
 
       #-------------------------------------------------------------------------
@@ -171,7 +182,7 @@ class Lox
         { value: value }
       end
 
-      def to_s
+      def to_lox
         value
       end
 
@@ -194,7 +205,7 @@ class Lox
         @instance ||= new
       end
 
-      def to_s
+      def to_lox
         "true"
       end
 
@@ -283,12 +294,11 @@ class Lox
 
       # Visit a Literal node.
       def visit_literal(node)
-        case node.value
-        in Type::True then "true"
-        in Type::False then "false"
-        in Type::Nil then "nil"
-        in Type::Number[value:] then value.inspect
-        in Type::String[value:] then value.inspect
+        if node.value in Type::Number
+          lox = node.value.to_lox
+          lox.include?(".") ? lox : "#{lox}.0"
+        else
+          node.value.to_lox
         end
       end
 
@@ -369,6 +379,7 @@ class Lox
         
         begin
           visit_all(node.statements)
+          Type::Nil.instance
         ensure
           @environment = parent
         end
@@ -391,13 +402,14 @@ class Lox
 
       # Visit a Print node.
       def visit_print_statement(node)
-        puts visit(node.value)
+        puts visit(node.value).to_lox
+        Type::Nil.instance
       end
 
       # Visit a Program node.
       def visit_program(node)
         visit_all(node.statements)
-        nil
+        Type::Nil.instance
       end
 
       # Visit a Unary node.
@@ -417,7 +429,7 @@ class Lox
 
       # Visit a VariableDeclaration node.
       def visit_variable_declaration(node)
-        environment.declare(node, node.initializer ? visit(node.initializer) : nil)
+        environment.declare(node, node.initializer ? visit(node.initializer) : Type::Nil.instance)
       end
     end
   end
@@ -447,16 +459,16 @@ class Lox
     # A token is a representation of a single lexical unit in the source code.
     # It is consumed and discarded after parsing.
     class Token
-      attr_reader :type, :value, :location
+      attr_reader :type, :location, :value
 
-      def initialize(type:, value:, index:, length:)
+      def initialize(type:, location:, value:)
         @type = type
+        @location = location
         @value = value
-        @location = Location.new(start: index, finish: index + length)
       end
 
       def deconstruct_keys(keys)
-        { type: type, value: value, location: location }
+        { type: type, location: location, value: value }
       end
     end
 
@@ -765,34 +777,100 @@ class Lox
     end
   end
 
+  # This class is responsible for converting a source string into a stream of
+  # tokens. It has some extra functionality to provide missing tokens if
+  # necessary.
+  class Lexer
+    attr_reader :tokens
+
+    def initialize(source)
+      @tokens = lex(source)
+    end
+
+    def consume(type)
+      peeked = peek
+
+      if peeked in { type: ^type }
+        self.next
+      else
+        AST::Token.new(type: :MISSING, location: peeked.location, value: nil)
+      end
+    end
+
+    def each(&)
+      tokens.each(&)
+    end
+
+    def match(type)
+      self.next if peek in { type: ^type }
+    end
+
+    def next
+      tokens.next
+    end
+
+    def peek
+      tokens.peek
+    end
+
+    private
+
+    def lex(source)
+      Enumerator.new do |enum|
+        index = 0
+  
+        while index < source.length
+          case source[index..]
+          in /\A(\/\/[^\n]*|\s+)/
+            # skip whitespace and comments
+          in /\A([(){},\.\-+;*\/]|[!=><]=?)/
+            enum << AST::Token.new(
+              type: OPERATORS[$&],
+              location: AST::Location.new(start: index, finish: index + $&.length),
+              value: $&
+            )
+          in /\A"([^"]*)"?/
+            finish = index + $&.length
+            unless $&.end_with?("\"")
+              raise Error::SyntaxError.new("Error: Unterminated string.", AST::Location.new(start: index, finish: finish))
+            end
+
+            enum << AST::Token.new(
+              type: :STRING,
+              location: AST::Location.new(start: index, finish: finish),
+              value: $&[1...-1]
+            )
+          in /\A\d+(\.\d+)?/
+            enum << AST::Token.new(
+              type: :NUMBER,
+              location: AST::Location.new(start: index, finish: index + $&.length),
+              value: $&.to_d
+            )
+          in /\A[a-z_][A-Za-z0-9_]*/
+            type = KEYWORDS.include?($&) ? $&.upcase.to_sym : :IDENTIFIER
+            enum << AST::Token.new(
+              type: type,
+              location: AST::Location.new(start: index, finish: index + $&.length),
+              value: $&
+            )
+          end
+  
+          index += $&.length
+        end
+  
+        enum << AST::Token.new(
+          type: :EOF,
+          location: AST::Location.new(start: index, finish: index),
+          value: nil
+        )
+      end
+    end
+  end
+
   # This takes a source string and converts it into an enumerator that will
   # yield out one token at a time.
   def tokens(source)
-    Enumerator.new do |enum|
-      index = 0
-
-      while index < source.length
-        case source[index..]
-        in /\A(\/\/[^\n]*|\s+)/
-          # skip whitespace and comments
-        in /\A([(){},\.\-+;*\/]|[!=><]=?)/
-          type = OPERATORS[$&]
-          enum << AST::Token.new(type: type, index: index, length: $&.length, value: nil)
-        in /\A"([^"]*)"/
-          enum << AST::Token.new(type: :STRING, index: index, length: $&.length, value: $&[1...-1])
-        in /\A\d+(\.\d+)?/
-          enum << AST::Token.new(type: :NUMBER, index: index, length: $&.length, value: $&.to_f)
-        in /\A[a-z_][A-Za-z0-9_]*/
-          type = KEYWORDS.include?($&) ? $&.upcase.to_sym : :IDENTIFIER
-          value = type == :IDENTIFIER ? $& : nil
-          enum << AST::Token.new(type: type, index: index, length: $&.length, value: value)
-        end
-
-        index += $&.length
-      end
-
-      enum << AST::Token.new(type: :EOF, index: index, length: 0, value: nil)
-    end
+    Lexer.new(source)
   end
 
   # This parses a source string and returns the correspond syntax tree.
@@ -829,14 +907,19 @@ class Lox
     while (infix = Precedence.infix_for(tokens.peek)) && (precedence <= infix)
       token = tokens.next
       node =
-        if token.type != :EQUAL
+        if token.type == :EQUAL
+          case node
+          in AST::Variable
+            value = parse_expression(tokens, infix)
+            AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
+          in AST::Literal[value: Type::True | Type::False | Type::Nil => value]
+            raise Error::SyntaxError.new("Error at '#{value.to_lox}': Expect variable name.", node.location)
+          else
+            raise Error::SyntaxError.new("Error at '#{token.value}': Invalid assignment target.", token.location)
+          end
+        else
           right = parse_expression(tokens, infix + 1)
           AST::Binary.new(left: node, operator: token, right: right, location: node.location.to(right.location))
-        elsif !(node in AST::Variable)
-          raise Error::SyntaxError.new("Invalid assignment target.", token.location)
-        else
-          value = parse_expression(tokens, infix)
-          AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
         end
     end
 
@@ -865,17 +948,17 @@ class Lox
   end
 
   def parse_var_declaration(tokens)
-    tokens.next => { type: :VAR }
-    tokens.next => { type: :IDENTIFIER, value: name, location: slocation }
+    keyword = tokens.consume(:VAR)
+    identifier = tokens.consume(:IDENTIFIER)
 
-    if tokens.peek in { type: :EQUAL }
-      tokens.next
-      initializer = parse_expression(tokens)
-    end
-
-    tokens.next => { type: :SEMICOLON, location: elocation }
+    initializer = parse_expression(tokens) if tokens.match(:EQUAL)
+    semicolon = tokens.consume(:SEMICOLON)
   
-    AST::VariableDeclaration.new(name: name, initializer: initializer, location: slocation.to(elocation))
+    AST::VariableDeclaration.new(
+      name: identifier.value,
+      initializer: initializer,
+      location: keyword.location.to(semicolon.location)
+    )
   end
 
   def parse_statement(tokens)
@@ -890,28 +973,37 @@ class Lox
   end
 
   def parse_print_statement(tokens)
-    tokens.next => { type: :PRINT, location: slocation }
+    keyword = tokens.consume(:PRINT)
     value = parse_expression(tokens)
-    tokens.next => { type: :SEMICOLON, location: elocation }
+    semicolon = tokens.consume(:SEMICOLON)
 
-    AST::PrintStatement.new(value: value, location: slocation.to(elocation))
+    AST::PrintStatement.new(
+      value: value,
+      location: keyword.location.to(semicolon.location)
+    )
   end
 
   def parse_block_statement(tokens)
-    tokens.next => { type: :LEFT_BRACE, location: slocation }
+    lbrace = tokens.consume(:LEFT_BRACE)
 
     statements = []
     statements << parse_declaration(tokens) until tokens.peek in { type: :EOF | :RIGHT_BRACE }
-    tokens.next => { type: :RIGHT_BRACE, location: elocation }
+    rbrace = tokens.consume(:RIGHT_BRACE)
 
-    AST::BlockStatement.new(statements: statements, location: slocation.to(elocation))
+    AST::BlockStatement.new(
+      statements: statements,
+      location: lbrace.location.to(rbrace.location)
+    )
   end
 
   def parse_expression_statement(tokens)
     value = parse_expression(tokens)
-    tokens.next => { type: :SEMICOLON, location: elocation }
+    semicolon = tokens.consume(:SEMICOLON)
 
-    AST::Expression.new(value: value, location: value.location.to(elocation))
+    AST::Expression.new(
+      value: value,
+      location: value.location.to(semicolon.location)
+    )
   end
 end
 
@@ -923,10 +1015,14 @@ in "chap04_scanning"
   Lox.new.tokens(source).each do |token|
     value =
       case token
-      in { value: nil } | { type: :IDENTIFIER }
-        "null"
-      in { value: }
+      in { type: :NUMBER, value: }
+        number = Lox::Type::Number.new(value: value)
+        literal = Lox::AST::Literal.new(value: number, location: nil)
+        literal.accept(Lox::Visitor::DebugVisitor.new)
+      in { type: :STRING, value: }
         value
+      else
+        "null"
       end
 
     puts "#{token.type} #{source[token.location.range]} #{value}"
@@ -936,17 +1032,18 @@ in "chap06_parsing"
   puts Lox.new.parse_expression(tokens).accept(Lox::Visitor::DebugVisitor.new)
 in "chap07_evaluating"
   tokens = Lox.new.tokens(source)
-  puts Lox.new.parse_expression(tokens).accept(Lox::Visitor::EvaluateVisitor.new)
+  puts Lox.new.parse_expression(tokens).accept(Lox::Visitor::EvaluateVisitor.new).to_lox
 in "chap08_statements"
   begin
     Lox.new.parse(source).accept(Lox::Visitor::EvaluateVisitor.new)
   rescue Lox::Error::SyntaxError => error
-    warn(error.message)
-    warn("[line #{source[0..error.location.start].count("\n") + 1}]")
+    lineno = source[0..error.location.start].count("\n") + 1
+    warn("[line #{lineno}] #{error.message}")
     exit 65
   rescue Lox::Error::RuntimeError => error
+    lineno = source[0..error.location.start].count("\n") + 1
     warn(error.message)
-    warn("[line #{source[0..error.location.start].count("\n") + 1}]")
+    warn("[line #{lineno}]")
     exit 70
   end
 end
