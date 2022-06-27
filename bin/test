@@ -6,7 +6,7 @@ SUITE=${1:-all}
 
 # Here we're getting a handle on a reference to the interpreter script. It's an
 # absolute path so it doesn't have trouble with the pushd/popd commands.
-INTERP=$PWD/rlox.rb
+INTERP=$PWD/bin/rlox
 
 # We're going to enter the book's repository because the dart tests must be run
 # at the root of the repository.

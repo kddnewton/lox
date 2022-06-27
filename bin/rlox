@@ -1,0 +1,41 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+$:.unshift(File.expand_path("../lib", __dir__))
+require "rlox"
+
+source = File.read(ARGV.first)
+suite = ENV.fetch("SUITE", "chap08_statements")
+
+case suite
+in "chap04_scanning"
+  Lox::Lexer.new(source).each do |token|
+    value =
+      case token
+      in { type: :NUMBER, value: }
+        number = Lox::Type::Number.new(value: value)
+        literal = Lox::AST::Literal.new(value: number, location: nil)
+        literal.accept(Lox::Visitor::DebugVisitor.new)
+      in { type: :STRING, value: }
+        value
+      else
+        "null"
+      end
+
+    puts "#{token.type} #{source[token.location.range]} #{value}"
+  end
+in "chap06_parsing"
+  puts Lox::Parser.new.parse_expression(Lox::Lexer.new(source)).accept(Lox::Visitor::DebugVisitor.new)
+in "chap07_evaluating"
+  puts Lox::Parser.new.parse_expression(Lox::Lexer.new(source)).accept(Lox::Visitor::EvaluateVisitor.new).to_lox
+in "chap08_statements"
+  begin
+    Lox::Parser.new.parse(source).accept(Lox::Visitor::EvaluateVisitor.new)
+  rescue Lox::Error::SyntaxError => error
+    warn(error.detailed_message(source: source))
+    exit 65
+  rescue Lox::Error::RuntimeError => error
+    warn(error.detailed_message(source: source))
+    exit 70
+  end
+end
