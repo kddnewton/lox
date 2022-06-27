@@ -51,16 +51,32 @@ module Lox
       # Visit a Binary node.
       def visit_binary(node)
         case node.operator.type
-        in :BANG_EQUAL then visit(node.left) != visit(node.right)
-        in :EQUAL_EQUAL then visit(node.left) == visit(node.right)
-        in :GREATER then visit(node.left) > visit(node.right)
-        in :GREATER_EQUAL then visit(node.left) >= visit(node.right)
-        in :LESS then visit(node.left) < visit(node.right)
-        in :LESS_EQUAL then visit(node.left) <= visit(node.right)
-        in :MINUS then visit(node.left) - visit(node.right)
-        in :PLUS then visit(node.left) + visit(node.right)
-        in :SLASH then visit(node.left) / visit(node.right)
-        in :STAR then visit(node.left) * visit(node.right)
+        in :AND
+          left = visit(node.left)
+          left.truthy? ? visit(node.right) : left
+        in :BANG_EQUAL
+          visit(node.left) != visit(node.right)
+        in :EQUAL_EQUAL
+          visit(node.left) == visit(node.right)
+        in :GREATER
+          visit(node.left) > visit(node.right)
+        in :GREATER_EQUAL
+          visit(node.left) >= visit(node.right)
+        in :LESS
+          visit(node.left) < visit(node.right)
+        in :LESS_EQUAL
+          visit(node.left) <= visit(node.right)
+        in :MINUS
+          visit(node.left) - visit(node.right)
+        in :OR
+          left = visit(node.left)
+          left.truthy? ? left : visit(node.right)
+        in :PLUS
+          visit(node.left) + visit(node.right)
+        in :SLASH
+          visit(node.left) / visit(node.right)
+        in :STAR
+          visit(node.left) * visit(node.right)
         end
       rescue Error::RuntimeError => error
         raise Error::RuntimeError.new(error.message, node.operator.location)
@@ -70,7 +86,7 @@ module Lox
       def visit_block_statement(node)
         parent = environment
         @environment = Environment.new(parent)
-        
+
         begin
           visit_all(node.statements)
           Type::Nil.instance
@@ -84,9 +100,49 @@ module Lox
         visit(node.value)
       end
 
+      # Visit a ForStatement node.
+      def visit_for_statement(node)
+        body = node.body
+
+        if node.increment
+          body =
+            AST::BlockStatement.new(
+              statements: [node.body, node.increment],
+              location: node.body.location.to(node.increment.location)
+            )
+        end
+
+        desugared =
+          AST::WhileStatement.new(
+            condition: node.condition || AST::Literal.new(value: Type::True.instance),
+            body: body,
+            location: node.location
+          )
+
+        if node.initializer
+          desugared =
+            AST::BlockStatement.new(
+              statements: [node.initializer, desugared],
+              location: node.initializer.location.to(desugared.location)
+            )
+        end
+
+        visit(desugared)
+      end
+
       # Visit a Group node.
       def visit_group(node)
         visit(node.node)
+      end
+
+      # Visit an IfStatement node.
+      def visit_if_statement(node)
+        if visit(node.condition).truthy?
+          visit(node.then_branch)
+        elsif node.else_branch
+          visit(node.else_branch)
+        end
+        Type::Nil.instance
       end
 
       # Visit a Literal node.
@@ -129,6 +185,14 @@ module Lox
       # Visit a VariableDeclaration node.
       def visit_variable_declaration(node)
         environment.declare(node, node.initializer ? visit(node.initializer) : Type::Nil.instance)
+      end
+
+      # Visit a WhileStatement node.
+      def visit_while_statement(node)
+        while visit(node.condition).truthy?
+          visit(node.body)
+        end
+        Type::Nil.instance
       end
     end
   end

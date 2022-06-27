@@ -6,6 +6,10 @@ module Lox
     # on any kind of value. So here we're going to prepare base implementations
     # that just raise.
     class Object
+      def truthy?
+        true
+      end
+
       def unwrap_number(message = "Operands must be numbers.")
         raise Error::RuntimeError, message unless (self in Number)
         value

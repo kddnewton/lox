@@ -35,7 +35,9 @@ module Lox
         @location = location
       end
 
-      def detailed_message(source:, **)
+      def detailed_message(source: nil, **)
+        return super unless source
+
         lineno = source[0..location.start].count("\n") + 1
         "[line #{lineno}] #{message}"
       end
@@ -50,7 +52,9 @@ module Lox
         @location = location
       end
 
-      def detailed_message(source:, **)
+      def detailed_message(source: nil, **)
+        return super unless source
+
         lineno = source[0..location.start].count("\n") + 1
         "#{message}\n[line #{lineno}]"
       end

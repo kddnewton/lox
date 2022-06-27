@@ -29,8 +29,14 @@ module Lox
       # Visit an Expression node.
       alias visit_expression visit_child_nodes
 
+      # Visit a ForStatement node.
+      alias visit_for_statement visit_child_nodes
+
       # Visit a Group node.
       alias visit_group visit_child_nodes
+
+      # Visit an IfStatement node.
+      alias visit_if_statement visit_child_nodes
 
       # Visit a Literal node.
       alias visit_literal visit_child_nodes
@@ -52,6 +58,9 @@ module Lox
 
       # Visit a VariableDeclaration node.
       alias visit_variable_declaration visit_child_nodes
+
+      # Visit a WhileStatement node.
+      alias visit_while_statement visit_child_nodes
     end
   end
 end

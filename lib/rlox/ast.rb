@@ -140,6 +140,33 @@ module Lox
       end
     end
 
+    # This represents a for loop.
+    class ForStatement
+      attr_reader :initializer, :condition, :increment, :body, :location
+
+      def initialize(initializer:, condition:, increment:, body:, location:)
+        @initializer = initializer
+        @condition = condition
+        @increment = increment
+        @body = body
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_for_statement(self)
+      end
+
+      def child_nodes
+        [initializer, condition, increment, body]
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { initializer: initializer, condition: condition, increment: increment, body: body, location: location }
+      end
+    end
+
     # A group is a node that holds another node. It is used to represent the use
     # of parentheses in the source code.
     class Group
@@ -162,6 +189,32 @@ module Lox
 
       def deconstruct_keys(keys)
         { node: node, location: location }
+      end
+    end
+
+    # An if statement with an optional else clause.
+    class IfStatement
+      attr_reader :condition, :then_branch, :else_branch, :location
+
+      def initialize(condition:, then_branch:, else_branch:, location:)
+        @condition = condition
+        @then_branch = then_branch
+        @else_branch = else_branch
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_if_statement(self)
+      end
+
+      def child_nodes
+        [condition, then_branch, else_branch]
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { condition: condition, then_branch: then_branch, else_branch: else_branch, location: location }
       end
     end
 
@@ -333,6 +386,31 @@ module Lox
 
       def deconstruct_keys(keys)
         { name: name, initializer: initializer, location: location }
+      end
+    end
+
+    # This represents a while statement.
+    class WhileStatement
+      attr_reader :condition, :body, :location
+
+      def initialize(condition:, body:, location:)
+        @condition = condition
+        @body = body
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_while_statement(self)
+      end
+
+      def child_nodes
+        [condition, body]
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { condition: condition, body: body, location: location }
       end
     end
   end

@@ -3,19 +3,20 @@
 
 $:.unshift(File.expand_path("../lib", __dir__))
 require "rlox"
+require "prettyprint"
 
 source = File.read(ARGV.first)
-suite = ENV.fetch("SUITE", "chap08_statements")
+suite = ENV.fetch("SUITE", "chap09_control")
 
 case suite
 in "chap04_scanning"
-  Lox::Lexer.lex(source).each do |token|
+  Lox::Lexer.new(source).each do |token|
     value =
       case token
       in { type: :NUMBER, value: }
         number = Lox::Type::Number.new(value: value)
         literal = Lox::AST::Literal.new(value: number, location: nil)
-        literal.accept(Lox::Visitor::DebugVisitor.new)
+        PrettyPrint.format(+"") { |q| literal.accept(Lox::Visitor::DebugVisitor.new(q)) }
       in { type: :STRING, value: }
         value
       else
@@ -25,14 +26,20 @@ in "chap04_scanning"
     puts "#{token.type} #{source[token.location.range]} #{value}"
   end
 in "chap06_parsing"
-  puts Lox::Parser.new.parse_expression(Lox::Lexer.lex(source)).accept(Lox::Visitor::DebugVisitor.new)
+  puts PrettyPrint.format(+"") { |q|
+    Lox::Parser.new.parse_expression(Lox::Lexer.new(source)).accept(Lox::Visitor::DebugVisitor.new(q))
+  }
 in "chap07_evaluating"
-  puts Lox::Parser.new.parse_expression(Lox::Lexer.lex(source)).accept(Lox::Visitor::EvaluateVisitor.new).to_lox
-in "chap08_statements"
+  puts Lox::Parser.new.parse_expression(Lox::Lexer.new(source)).accept(Lox::Visitor::EvaluateVisitor.new).to_lox
+in "chap08_statements" | "chap09_control"
   begin
     parser = Lox::Parser.new
     program = parser.parse(source)
-    raise parser.errors.first if parser.errors.any?
+
+    if parser.errors.any?
+      parser.errors.each { |error| warn(error.detailed_message(source: source)) }
+      exit 65
+    end
 
     program.accept(Lox::Visitor::EvaluateVisitor.new)
   rescue Lox::Error::SyntaxError => error
