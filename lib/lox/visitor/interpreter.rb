@@ -7,7 +7,7 @@ module Lox
       class Environment
         attr_reader :parent, :variables, :functions
 
-        def initialize(parent:, functions:)
+        def initialize(parent: nil, functions: {})
           @parent = parent
           @variables = {}
           @functions = functions
@@ -58,7 +58,7 @@ module Lox
           clock: Function.new(arity: 0) { Type::Number.new(value: Time.now.to_i / 1000) }
         }
 
-        @environment = Environment.new(parent: nil, functions: functions)
+        @environment = Environment.new(functions: functions)
       end
 
       # Visit an Assignment node.

@@ -3,18 +3,18 @@
 require "bigdecimal"
 require "bigdecimal/util"
 
-require_relative "rlox/ast"
-require_relative "rlox/lexer"
-require_relative "rlox/parser"
-require_relative "rlox/type"
-require_relative "rlox/type/false"
-require_relative "rlox/type/nil"
-require_relative "rlox/type/number"
-require_relative "rlox/type/string"
-require_relative "rlox/type/true"
-require_relative "rlox/visitor"
-require_relative "rlox/visitor/interpreter"
-require_relative "rlox/visitor/pretty_printer"
+require_relative "lox/ast"
+require_relative "lox/lexer"
+require_relative "lox/parser"
+require_relative "lox/type"
+require_relative "lox/type/false"
+require_relative "lox/type/nil"
+require_relative "lox/type/number"
+require_relative "lox/type/string"
+require_relative "lox/type/true"
+require_relative "lox/visitor"
+require_relative "lox/visitor/interpreter"
+require_relative "lox/visitor/pretty_printer"
 
 # The top-level class that provides all of the functionality of the language.
 module Lox
@@ -75,11 +75,12 @@ module Lox
     end
 
     program.accept(Lox::Visitor::Interpreter.new)
+    0
   rescue Lox::Error::SyntaxError => error
     warn(error.detailed_message(source: source))
-    exit Lox::Error::SyntaxError::EXIT_CODE
+    Lox::Error::SyntaxError::EXIT_CODE
   rescue Lox::Error::RuntimeError => error
     warn(error.detailed_message(source: source))
-    exit Lox::Error::RuntimeError::EXIT_CODE
+    Lox::Error::RuntimeError::EXIT_CODE
   end
 end
