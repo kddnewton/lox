@@ -6,16 +6,15 @@ require "lox"
 require "prettyprint"
 
 source = File.read(ARGV.first)
-suite = ENV.fetch("SUITE", "chap09_control")
 
-case suite
+case ENV["SUITE"]
 in "chap04_scanning"
   Lox::Lexer.new(source).each do |token|
-    value =
+    suffix =
       case token
-      in { type: :NUMBER, value: }
+      in { type: :NUMBER, value:, location: }
         number = Lox::Type::Number.new(value: value)
-        literal = Lox::AST::Literal.new(value: number, location: nil)
+        literal = Lox::AST::Literal.new(value: number, location: location)
         PrettyPrint.format(+"") { |q| literal.accept(Lox::Visitor::PrettyPrinter.new(q)) }
       in { type: :STRING, value: }
         value
@@ -23,14 +22,14 @@ in "chap04_scanning"
         "null"
       end
 
-    puts "#{token.type} #{source[token.location.range]} #{value}"
+    puts "#{token.type} #{source[token.location.range]} #{suffix}"
   end
 in "chap06_parsing"
-  puts PrettyPrint.format(+"") { |q|
-    Lox::Parser.new.parse_expression(Lox::Lexer.new(source)).accept(Lox::Visitor::PrettyPrinter.new(q))
-  }
+  expr = Lox::Parser.new.parse_expression(Lox::Lexer.new(source))
+  puts PrettyPrint.format(+"") { |q| expr.accept(Lox::Visitor::PrettyPrinter.new(q)) }
 in "chap07_evaluating"
-  puts Lox::Parser.new.parse_expression(Lox::Lexer.new(source)).accept(Lox::Visitor::Interpreter.new).to_lox
-in "chap08_statements" | "chap09_control"
+  expr = Lox::Parser.new.parse_expression(Lox::Lexer.new(source))
+  puts expr.accept(Lox::Visitor::Interpreter.new).to_lox
+else
   exit Lox.interpret(source)
 end
