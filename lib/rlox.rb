@@ -13,8 +13,8 @@ require_relative "rlox/type/number"
 require_relative "rlox/type/string"
 require_relative "rlox/type/true"
 require_relative "rlox/visitor"
-require_relative "rlox/visitor/debug_visitor"
-require_relative "rlox/visitor/evaluate_visitor"
+require_relative "rlox/visitor/interpreter"
+require_relative "rlox/visitor/pretty_printer"
 
 # The top-level class that provides all of the functionality of the language.
 module Lox
@@ -28,6 +28,8 @@ module Lox
     # This error occurs during parsing when a token is not recognized or not
     # properly formed.
     class SyntaxError < Error
+      EXIT_CODE = 65
+
       attr_reader :location
 
       def initialize(message, location = nil)
@@ -45,6 +47,8 @@ module Lox
 
     # This is an error that occurs when a lox error is raised.
     class RuntimeError < Error
+      EXIT_CODE = 70
+
       attr_reader :location
 
       def initialize(message, location = nil)
@@ -59,5 +63,23 @@ module Lox
         "#{message}\n[line #{lineno}]"
       end
     end
+  end
+
+  def self.interpret(source)
+    parser = Lox::Parser.new
+    program = parser.parse(source)
+
+    if parser.errors.any?
+      parser.errors.each { |error| warn(error.detailed_message(source: source)) }
+      exit Lox::Error::SyntaxError::EXIT_CODE
+    end
+
+    program.accept(Lox::Visitor::Interpreter.new)
+  rescue Lox::Error::SyntaxError => error
+    warn(error.detailed_message(source: source))
+    exit Lox::Error::SyntaxError::EXIT_CODE
+  rescue Lox::Error::RuntimeError => error
+    warn(error.detailed_message(source: source))
+    exit Lox::Error::RuntimeError::EXIT_CODE
   end
 end

@@ -3,7 +3,7 @@
 module Lox
   module Visitor
     # This is a visitor that will walk the tree and evaluate it.
-    class EvaluateVisitor < BaseVisitor
+    class Interpreter < BaseVisitor
       class Environment
         attr_reader :parent, :variables, :functions
 

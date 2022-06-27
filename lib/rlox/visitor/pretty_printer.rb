@@ -4,7 +4,7 @@ module Lox
   module Visitor
     # This is a visitor that will print the tree to a set of s-expressions that
     # match what the book's test suite expects.
-    class DebugVisitor < BaseVisitor
+    class PrettyPrinter < BaseVisitor
       # In debug methods, it's necessary to go from the operator to the value
       # that it represents in source.
       OPERATORS_NAMES = Lexer::OPERATORS.invert
@@ -15,6 +15,16 @@ module Lox
         @q = q
       end
 
+      # Visit an Assignment node.
+      def visit_assignment(node)
+        group("assignment") do
+          q.breakable
+          visit(node.variable)
+          q.breakable
+          visit(node.value)
+        end
+      end
+
       # Visit a Binary node.
       def visit_binary(node)
         group(OPERATORS_NAMES[node.operator.type]) do
@@ -22,6 +32,14 @@ module Lox
           visit(node.left)
           q.breakable
           visit(node.right)
+        end
+      end
+
+      # Visit a BlockStatement node.
+      def visit_block_statement(node)
+        group("block-statement") do
+          q.breakable
+          q.seplist(node.statements) { |statement| visit(statement) }
         end
       end
 
@@ -35,6 +53,14 @@ module Lox
             q.breakable
             q.seplist(node.arguments) { |argument| visit(argument) }
           end
+        end
+      end
+
+      # Visit an Expression node.
+      def visit_expression(node)
+        group("expression") do
+          q.breakable
+          visit(node.value)
         end
       end
 
@@ -93,11 +119,48 @@ module Lox
         q.text("(missing)")
       end
 
+      # Visit a Print node.
+      def visit_print_statement(node)
+        group("print") do
+          q.breakable
+          visit(node.value)
+        end
+      end
+
+      # Visit a Program node.
+      def visit_program(node)
+        group("program") do
+          q.breakable
+          q.seplist(node.statements) { |statement| visit(statement) }
+        end
+      end
+
       # Visit a Unary node.
       def visit_unary(node)
         group(OPERATORS_NAMES[node.operator.type]) do
           q.breakable
           visit(node.node)
+        end
+      end
+
+      # Visit a Variable node.
+      def visit_variable(node)
+        group("variable") do
+          q.breakable
+          q.text(node.name)
+        end
+      end
+
+      # Visit a VariableDeclaration node.
+      def visit_variable_declaration(node)
+        group("variable-declaration") do
+          q.breakable
+          q.text(node.name)
+
+          if node.initializer
+            q.breakable
+            visit(node.initializer)
+          end
         end
       end
 

@@ -16,7 +16,7 @@ in "chap04_scanning"
       in { type: :NUMBER, value: }
         number = Lox::Type::Number.new(value: value)
         literal = Lox::AST::Literal.new(value: number, location: nil)
-        PrettyPrint.format(+"") { |q| literal.accept(Lox::Visitor::DebugVisitor.new(q)) }
+        PrettyPrint.format(+"") { |q| literal.accept(Lox::Visitor::PrettyPrinter.new(q)) }
       in { type: :STRING, value: }
         value
       else
@@ -27,7 +27,7 @@ in "chap04_scanning"
   end
 in "chap06_parsing"
   puts PrettyPrint.format(+"") { |q|
-    Lox::Parser.new.parse_expression(Lox::Lexer.new(source)).accept(Lox::Visitor::DebugVisitor.new(q))
+    Lox::Parser.new.parse_expression(Lox::Lexer.new(source)).accept(Lox::Visitor::PrettyPrinter.new(q))
   }
 in "chap07_evaluating"
   puts Lox::Parser.new.parse_expression(Lox::Lexer.new(source)).accept(Lox::Visitor::EvaluateVisitor.new).to_lox
