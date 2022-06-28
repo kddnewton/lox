@@ -153,6 +153,31 @@ module Lox
       end
     end
 
+    # This represents a class declaration.
+    class ClassStatement
+      attr_reader :name, :methods, :location
+
+      def initialize(name:, methods:, location:)
+        @name = name
+        @methods = methods
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_class_statement(self)
+      end
+
+      def child_nodes
+        methods
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { name: name.value, methods: methods, location: location }
+      end
+    end
+
     # This represents an expression to be executed.
     class Expression
       attr_reader :value, :location
@@ -255,7 +280,32 @@ module Lox
       alias deconstruct child_nodes
 
       def deconstruct_keys(keys)
-        { name: name, parameters: parameters, statements: statements, location: location }
+        { name: name, parameters: parameters.map(&:name), statements: statements, location: location }
+      end
+    end
+
+    # This represents accessing a member of an object.
+    class GetExpression
+      attr_reader :object, :name, :location
+
+      def initialize(object:, name:, location:)
+        @object = object
+        @name = name
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_get_expression(self)
+      end
+
+      def child_nodes
+        [object]
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { object: object, name: name.value, location: location }
       end
     end
 
@@ -427,6 +477,32 @@ module Lox
 
       def deconstruct_keys(keys)
         { value: value, location: location }
+      end
+    end
+
+    # This represents setting a member of an object.
+    class SetExpression
+      attr_reader :object, :name, :value, :location
+
+      def initialize(object:, name:, value:, location:)
+        @object = object
+        @name = name
+        @value = value
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_set_expression(self)
+      end
+
+      def child_nodes
+        [value, object]
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { object: object, name: name.value, value: value, location: location }
       end
     end
 

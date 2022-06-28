@@ -135,6 +135,12 @@ module Lox
         end
       end
 
+      # Visit a ClassStatement node.
+      def visit_class_statement(node)
+        environment.declare(node.name.value, nil)
+        environment.assign(node.name.value, Type::Class.new(name: node.name.value), node.name.location)
+      end
+
       # Visit an Expression node.
       def visit_expression(node)
         visit(node.value)
@@ -167,6 +173,16 @@ module Lox
         )
 
         Type::Nil.instance
+      end
+
+      # Visit a GetExpression node.
+      def visit_get_expression(node)
+        object = visit(node.object)
+        if !(object in Type::Instance)
+          raise Error::RuntimeError.new("Only instances have properties.", node.location)
+        end
+
+        object.get(node.name.value, node.location)
       end
 
       # Visit a Group node.
@@ -209,6 +225,16 @@ module Lox
       # Visit a ReturnStatement node.
       def visit_return_statement(node)
         raise LongJump, node.value ? visit(node.value) : Type::Nil.instance
+      end
+
+      # Visit a SetExpression node.
+      def visit_set_expression(node)
+        object = visit(node.object)
+        if !(object in Type::Instance)
+          raise Error::RuntimeError.new("Error at #{node.name.to_value_s}: Only instances have fields.", node.name.location)
+        end
+
+        object.set(node.name.value, visit(node.value))
       end
 
       # Visit a Unary node.

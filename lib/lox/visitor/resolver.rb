@@ -23,6 +23,12 @@ module Lox
         push_scope { visit_all(node.statements) }
       end
 
+      # Visit a ClassStatement node.
+      def visit_class_statement(node)
+        declare(node.name, node.location)
+        define(node.name)
+      end
+
       # Visit a ForStatement node.
       def visit_for_statement(node)
         visit(node.desugar)

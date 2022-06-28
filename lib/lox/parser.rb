@@ -30,7 +30,7 @@ module Lox
         in :GREATER | :GREATER_EQUAL | :LESS | :LESS_EQUAL then COMPARISON
         in :MINUS | :PLUS then TERM
         in :SLASH | :STAR then FACTOR
-        in :LEFT_PAREN then CALL
+        in :LEFT_PAREN | :DOT then CALL
         else NONE
         end
       end
@@ -93,17 +93,20 @@ module Lox
         node =
           case token
           in { type: :EQUAL }
+            value = parse_expression(tokens, infix)
+
             case node
             in AST::Variable
-              # do nothing, this is what we want
+              AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
+            in AST::GetExpression
+              AST::SetExpression.new(object: node.object, name: node.name, value: value, location: node.location.to(value.location))
             in AST::Literal[value: Type::True | Type::False | Type::Nil => value]
               errors << Error::SyntaxError.new("Error at '#{value.to_lox}': Expect variable name.", node.location)
+              AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
             else
               errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Invalid assignment target.", token.location)
+              AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
             end
-
-            value = parse_expression(tokens, infix)
-            AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
           in { type: :LEFT_PAREN, location: arguments_location }
             arguments = []
 
@@ -125,6 +128,9 @@ module Lox
             rparen = consume(tokens, :RIGHT_PAREN, "Expect ')' after arguments.")
             synchronize(tokens) if rparen in { type: :MISSING }
             AST::Call.new(callee: node, arguments: arguments, arguments_location: arguments_location, location: node.location.to(rparen.location))
+          in { type: :DOT }
+            name = consume(tokens, :IDENTIFIER, "Expect property name after '.'.")
+            AST::GetExpression.new(object: node, name: name, location: node.location.to(name.location))
           else
             right = parse_expression(tokens, infix + 1)
             AST::Binary.new(left: node, operator: token, right: right, location: node.location.to(right.location))
@@ -243,8 +249,10 @@ module Lox
 
     def parse_declaration(tokens)
       case tokens.peek
+      in { type: :CLASS }
+        parse_class_declaration(tokens)
       in { type: :FUN }
-        parse_function(tokens, :function)
+        parse_function(tokens, :function, tokens.next.location)
       in { type: :VAR }
         parse_var_declaration(tokens)
       else
@@ -252,8 +260,25 @@ module Lox
       end
     end
 
-    def parse_function(tokens, kind)
-      keyword = consume(tokens, :FUN, "Expected 'fun'.")
+    def parse_class_declaration(tokens)
+      keyword = consume(tokens, :CLASS, "Expect 'class'.")
+      name = consume(tokens, :IDENTIFIER, "Expect class name.")
+      consume(tokens, :LEFT_BRACE, "Expect '{' before class body.")
+
+      methods = []
+      while !(tokens.peek in { type: :RIGHT_BRACE | :EOF })
+        methods << parse_function(tokens, :method)
+      end
+
+      rbrace = consume(tokens, :RIGHT_BRACE, "Expect '}' after class body.")
+      AST::ClassStatement.new(
+        name: name,
+        methods: methods,
+        location: keyword.location.to(rbrace.location)
+      )
+    end
+
+    def parse_function(tokens, kind, start_location = nil)
       name = consume(tokens, :IDENTIFIER, "Expected #{kind} name.")
       consume(tokens, :LEFT_PAREN, "Expect '(' after #{kind} name.")
 
@@ -278,7 +303,7 @@ module Lox
         name: name.value,
         parameters: parameters,
         statements: body.statements,
-        location: keyword.location.to(body.location)
+        location: (start_location || name.location).to(body.location)
       )
     end
 

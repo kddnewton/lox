@@ -56,6 +56,17 @@ module Lox
         end
       end
 
+      # Visit a ClassStatement node.
+      def visit_class_statement(node)
+        group("class") do
+          q.breakable
+          q.text(node.name.value)
+
+          q.breakable
+          q.seplist(node.methods) { |method| visit(method) }
+        end
+      end
+
       # Visit an Expression node.
       def visit_expression(node)
         group("expression") do
@@ -92,6 +103,17 @@ module Lox
 
           q.breakable
           q.seplist(node.statements) { |statement| visit(statement) }
+        end
+      end
+
+      # Visit a GetExpression node.
+      def visit_get_expression(node)
+        group("get-expression") do
+          q.breakable
+          visit(node.object)
+
+          q.breakable
+          q.text(node.name)
         end
       end
 
@@ -156,6 +178,20 @@ module Lox
             q.breakable
             visit(node.value)
           end
+        end
+      end
+
+      # Visit a SetExpression node.
+      def visit_set_expression(node)
+        group("set-expression") do
+          q.breakable
+          visit(node.object)
+
+          q.breakable
+          q.text(node.name.value)
+
+          q.breakable
+          visit(node.value)
         end
       end
 

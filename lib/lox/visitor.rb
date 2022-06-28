@@ -29,6 +29,9 @@ module Lox
       # Visit a Call node.
       alias visit_call visit_child_nodes
 
+      # Visit a ClassStatement node.
+      alias visit_class_statement visit_child_nodes
+
       # Visit an Expression node.
       alias visit_expression visit_child_nodes
 
@@ -37,6 +40,9 @@ module Lox
 
       # Visit a Function node.
       alias visit_function visit_child_nodes
+
+      # Visit a GetExpression node.
+      alias visit_get_expression visit_child_nodes
 
       # Visit a Group node.
       alias visit_group visit_child_nodes
@@ -58,6 +64,9 @@ module Lox
 
       # Visit a ReturnStatement node.
       alias visit_return_statement visit_child_nodes
+
+      # Visit a SetExpression node.
+      alias visit_set_expression visit_child_nodes
 
       # Visit a Unary node.
       alias visit_unary visit_child_nodes
