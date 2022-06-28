@@ -19,28 +19,39 @@ require_relative "lox/type/true"
 require_relative "lox/visitor"
 require_relative "lox/visitor/interpreter"
 require_relative "lox/visitor/pretty_printer"
+require_relative "lox/visitor/resolver"
 
 # The top-level class that provides all of the functionality of the language.
 module Lox
-  # This is the main entry point for the lox interpreter. It parses the given
-  # source into a tree and then walks it to interpret it. The return value of
-  # this function is the exit code of the program.
-  def self.interpret(source)
-    parser = Lox::Parser.new
-    program = parser.parse(source)
+  class << self
+    # This is the main entry point for the lox interpreter. It parses the given
+    # source into a tree and then walks it to interpret it. The return value of
+    # this function is the exit code of the program.
+    def interpret(source)
+      parser = Lox::Parser.new
+      program = parser.parse(source)
+      handle_syntax_errors(source, parser.errors)
 
-    if parser.errors.any?
-      parser.errors.each { |error| warn(error.detailed_message(source: source)) }
-      exit Lox::Error::SyntaxError::EXIT_CODE
+      interpreter = Lox::Visitor::Interpreter.new
+      program.accept(Lox::Visitor::Resolver.new(interpreter))
+      handle_syntax_errors(source, interpreter.errors)
+
+      program.accept(interpreter)
+      0
+    rescue Lox::Error::SyntaxError => error
+      handle_syntax_errors(source, [error])
+    rescue Lox::Error::RuntimeError => error
+      warn(error.detailed_message(source: source))
+      Lox::Error::RuntimeError::EXIT_CODE
     end
 
-    program.accept(Lox::Visitor::Interpreter.new)
-    0
-  rescue Lox::Error::SyntaxError => error
-    warn(error.detailed_message(source: source))
-    Lox::Error::SyntaxError::EXIT_CODE
-  rescue Lox::Error::RuntimeError => error
-    warn(error.detailed_message(source: source))
-    Lox::Error::RuntimeError::EXIT_CODE
+    private
+
+    def handle_syntax_errors(source, errors)
+      return if errors.empty?
+
+      errors.each { |error| warn(error.detailed_message(source: source)) }
+      exit Lox::Error::SyntaxError::EXIT_CODE
+    end
   end
 end

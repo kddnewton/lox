@@ -202,16 +202,45 @@ module Lox
       def deconstruct_keys(keys)
         { initializer: initializer, condition: condition, increment: increment, body: body, location: location }
       end
+
+      def desugar
+        statements = body
+
+        if increment
+          statements =
+            AST::BlockStatement.new(
+              statements: [body, increment],
+              location: body.location.to(increment.location)
+            )
+        end
+
+        desugared =
+          AST::WhileStatement.new(
+            condition: condition || AST::Literal.new(value: Type::True.instance, location: location),
+            body: statements,
+            location: location
+          )
+
+        if initializer
+          desugared =
+            AST::BlockStatement.new(
+              statements: [initializer, desugared],
+              location: initializer.location.to(desugared.location)
+            )
+        end
+
+        desugared
+      end
     end
 
     # This represents a function declaration.
     class Function
-      attr_reader :name, :parameters, :body, :location
+      attr_reader :name, :parameters, :statements, :location
 
-      def initialize(name:, parameters:, body:, location:)
+      def initialize(name:, parameters:, statements:, location:)
         @name = name
         @parameters = parameters
-        @body = body
+        @statements = statements
         @location = location
       end
 
@@ -220,13 +249,13 @@ module Lox
       end
 
       def child_nodes
-        [*parameters, body]
+        [*parameters, *statements]
       end
 
       alias deconstruct child_nodes
 
       def deconstruct_keys(keys)
-        { name: name, parameters: parameters, body: body, location: location }
+        { name: name, parameters: parameters, statements: statements, location: location }
       end
     end
 

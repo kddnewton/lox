@@ -88,10 +88,10 @@ module Lox
           q.text(node.name)
 
           q.breakable
-          q.seplist(node.parameters) { |parameter| q.text(parameter) }
+          q.seplist(node.parameters) { |parameter| q.text(parameter.value) }
 
           q.breakable
-          visit(node.body)
+          q.seplist(node.statements) { |statement| visit(statement) }
         end
       end
 

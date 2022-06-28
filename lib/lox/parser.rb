@@ -192,7 +192,7 @@ module Lox
           # Here we were expecting a delimiter and we got an item type. In that
           # case we'll throw in a missing token for the delimiter and switch
           # back to the item state.
-          consume(tokens, delimiter_type, "Error at #{token.to_value_s}: expected #{delimiter_type}.")
+          consume(tokens, delimiter_type, "expected #{delimiter_type}.")
           state = :item
         in [:delimit, { type: ^delimiter_type }]
           # Here we were expecting a delimiter and we got a delimiter. We'll
@@ -276,8 +276,8 @@ module Lox
 
       AST::Function.new(
         name: name.value,
-        parameters: parameters.map(&:value),
-        body: body,
+        parameters: parameters,
+        statements: body.statements,
         location: keyword.location.to(body.location)
       )
     end

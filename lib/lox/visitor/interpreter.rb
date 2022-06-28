@@ -19,8 +19,8 @@ module Lox
         def fetch(name, location)
           if variables.key?(name)
             variables[name]
-          elsif parent
-            parent.fetch(name, location)
+          # elsif parent
+            # parent.fetch(name, location)
           else
             raise Error::RuntimeError.new("Undefined variable '#{name}'.", location)
           end
@@ -29,8 +29,8 @@ module Lox
         def assign(name, value, location)
           if variables.key?(name)
             variables[name] = value
-          elsif parent
-            parent.assign(name, value, location)
+          # elsif parent
+            # parent.assign(name, value, location)
           else
             raise Error::RuntimeError.new("Undefined variable '#{name}'.", location)
           end
@@ -46,7 +46,7 @@ module Lox
         end
       end
 
-      attr_reader :environment
+      attr_reader :globals, :environment, :locals, :errors
 
       def initialize
         variables = {
@@ -55,12 +55,28 @@ module Lox
           }
         }
 
-        @environment = Environment.new(variables: variables)
+        @globals = @environment = Environment.new(variables: variables)
+        @locals = {}
+        @errors = []
+      end
+
+      # This is a callback from the resolver.
+      def resolve(node, depth)
+        locals[node] = depth
       end
 
       # Visit an Assignment node.
       def visit_assignment(node)
-        environment.assign(node.variable.name, visit(node.value), node.location)
+        origin =
+          if locals.key?(node.variable)
+            current = environment
+            locals[node.variable].times { current = current.parent }
+            current
+          else
+            globals
+          end
+
+        origin.assign(node.variable.name, visit(node.value), node.location)
       end
 
       # Visit a Binary node.
@@ -126,32 +142,7 @@ module Lox
 
       # Visit a ForStatement node.
       def visit_for_statement(node)
-        body = node.body
-
-        if node.increment
-          body =
-            AST::BlockStatement.new(
-              statements: [node.body, node.increment],
-              location: node.body.location.to(node.increment.location)
-            )
-        end
-
-        desugared =
-          AST::WhileStatement.new(
-            condition: node.condition || AST::Literal.new(value: Type::True.instance, location: node.location),
-            body: body,
-            location: node.location
-          )
-
-        if node.initializer
-          desugared =
-            AST::BlockStatement.new(
-              statements: [node.initializer, desugared],
-              location: node.initializer.location.to(desugared.location)
-            )
-        end
-
-        visit(desugared)
+        visit(node.desugar)
       end
 
       # Visit a Function node.
@@ -162,11 +153,12 @@ module Lox
           Type::Function.new(descriptor: "<fn #{node.name}>", arity: node.parameters.size, closure: closure) do |*arguments|
             push_frame(closure) do |environment|
               node.parameters.zip(arguments).each do |(parameter, argument)|
-                environment.declare(parameter, argument)
+                environment.declare(parameter.value, argument)
               end
 
               begin
-                visit(node.body)
+                visit_all(node.statements)
+                Type::Nil.instance
               rescue LongJump => jump
                 jump.value
               end
@@ -231,7 +223,16 @@ module Lox
 
       # Visit a Variable node.
       def visit_variable(node)
-        environment.fetch(node.name, node.location)
+        origin =
+          if locals.key?(node)
+            current = environment
+            locals[node].times { current = current.parent }
+            current
+          else
+            globals
+          end
+
+        origin.fetch(node.name, node.location)
       end
 
       # Visit a VariableDeclaration node.
