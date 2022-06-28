@@ -5,6 +5,17 @@ module Lox
   # tokens. It has some extra functionality to provide missing tokens if
   # necessary.
   class Lexer
+    # When running in the actual parser, it's going to report errors up to that.
+    # In case we're running _just_ as a lexer, we're going to report all of the
+    # errors back into this report object.
+    class Report
+      attr_reader :errors
+
+      def initialize
+        @errors = []
+      end
+    end
+
     # A list of strings that represent all of the keywords in the language.
     KEYWORDS = %w[and class else false fun for if nil or print return super this true var while]
 
@@ -17,10 +28,11 @@ module Lox
       ">=" => :GREATER_EQUAL, "<" => :LESS, "<=" => :LESS_EQUAL
     }
 
-    attr_reader :tokens, :previous
+    attr_reader :tokens, :report, :previous
 
-    def initialize(source)
+    def initialize(source, report = Report.new)
       @tokens = make_tokens(source)
+      @report = report
       @previous = nil
     end
 
@@ -76,6 +88,9 @@ module Lox
               location: AST::Location.new(start: index, finish: index + $&.length),
               value: $&
             )
+          in /\A./
+            location = AST::Location.new(start: index, finish: index + 1)
+            report.errors << Error::SyntaxError.new("Error: Unexpected character.", location)
           end
   
           index += $&.length

@@ -24,6 +24,8 @@ module Lox
         value
       end
 
+      def !@ = Type.boolean(!truthy?)
+
       def -@() = raise Error::RuntimeError, "Operand must be a number."
       def +(other) = raise Error::RuntimeError, "Operands must be two numbers or two strings."
       def -(other) = raise Error::RuntimeError, "Operands must be numbers."

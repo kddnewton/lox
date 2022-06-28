@@ -3,7 +3,7 @@
 
 $:.unshift(File.expand_path("../lib", __dir__))
 require "lox"
-require "prettyprint"
+require "pp"
 
 source = File.read(ARGV.first)
 
@@ -15,7 +15,7 @@ in "chap04_scanning"
       in { type: :NUMBER, value:, location: }
         number = Lox::Type::Number.new(value: value)
         literal = Lox::AST::Literal.new(value: number, location: location)
-        PrettyPrint.format(+"") { |q| literal.accept(Lox::Visitor::PrettyPrinter.new(q)) }
+        PP.new(+"").then { |q| literal.accept(Lox::Visitor::PrettyPrinter.new(q)); q.flush; q.output }
       in { type: :STRING, value: }
         value
       else
@@ -26,7 +26,7 @@ in "chap04_scanning"
   end
 in "chap06_parsing"
   expr = Lox::Parser.new.parse_expression(Lox::Lexer.new(source))
-  puts PrettyPrint.format(+"") { |q| expr.accept(Lox::Visitor::PrettyPrinter.new(q)) }
+  puts PP.new(+"").then { |q| expr.accept(Lox::Visitor::PrettyPrinter.new(q)); q.flush; q.output }
 in "chap07_evaluating"
   expr = Lox::Parser.new.parse_expression(Lox::Lexer.new(source))
   puts expr.accept(Lox::Visitor::Interpreter.new).to_lox

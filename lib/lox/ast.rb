@@ -37,6 +37,17 @@ module Lox
       def deconstruct_keys(keys)
         { type: type, location: location, value: value }
       end
+
+      def to_value_s
+        case type
+        in :NUMBER
+          "'#{Lox::Type::Number.new(value: value).to_lox}'"
+        in :EOF
+          "end"
+        else
+          "'#{value}'"
+        end
+      end
     end
 
     # This represents assigning to a variable.
@@ -118,11 +129,11 @@ module Lox
 
     # This represents a function call.
     class Call
-      attr_reader :callee, :left_paren, :arguments_location, :location
+      attr_reader :callee, :arguments, :arguments_location, :location
 
-      def initialize(callee:, left_paren:, arguments_location:, location:)
+      def initialize(callee:, arguments:, arguments_location:, location:)
         @callee = callee
-        @left_paren = left_paren
+        @arguments = arguments
         @arguments_location = arguments_location
         @location = location
       end
@@ -190,6 +201,32 @@ module Lox
 
       def deconstruct_keys(keys)
         { initializer: initializer, condition: condition, increment: increment, body: body, location: location }
+      end
+    end
+
+    # This represents a function declaration.
+    class Function
+      attr_reader :name, :parameters, :body, :location
+
+      def initialize(name:, parameters:, body:, location:)
+        @name = name
+        @parameters = parameters
+        @body = body
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_function(self)
+      end
+
+      def child_nodes
+        [*parameters, body]
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { name: name, parameters: parameters, body: body, location: location }
       end
     end
 
@@ -337,6 +374,30 @@ module Lox
 
       def deconstruct_keys(keys)
         { statements: statements, location: location }
+      end
+    end
+
+    # This represents a return statement.
+    class ReturnStatement
+      attr_reader :value, :location
+
+      def initialize(value:, location:)
+        @value = value
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_return_statement(self)
+      end
+
+      def child_nodes
+        [value]
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { value: value, location: location }
       end
     end
 

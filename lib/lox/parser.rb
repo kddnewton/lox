@@ -46,7 +46,7 @@ module Lox
 
     # This parses a source string and returns the correspond syntax tree.
     def parse(source)
-      parse_program(Lexer.new(source))
+      parse_program(Lexer.new(source, self))
     end
 
     # This parses an expression at or above the current level of precedence. It is
@@ -81,11 +81,11 @@ module Lox
         in { type: :IDENTIFIER, value:, location: }
           tokens.next
           AST::Variable.new(name: value, location: location)
-        in { type:, value:, location: }
-          errors << Error::SyntaxError.new("Error at '#{value}': Expect expression.", location)
+        in token
+          errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect expression.", token.location)
           tokens.next unless token in { type: :EOF }
-          synchronize(tokens, location)
-          return AST::Missing.new(location: location)
+          synchronize(tokens)
+          return AST::Missing.new(location: token.location)
         end
 
       while (infix = Precedence.infix_for(tokens.peek)) && (precedence <= infix)
@@ -99,7 +99,7 @@ module Lox
             in AST::Literal[value: Type::True | Type::False | Type::Nil => value]
               errors << Error::SyntaxError.new("Error at '#{value.to_lox}': Expect variable name.", node.location)
             else
-              errors << Error::SyntaxError.new("Error at '#{token.value}': Invalid assignment target.", token.location)
+              errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Invalid assignment target.", token.location)
             end
 
             value = parse_expression(tokens, infix)
@@ -118,11 +118,12 @@ module Lox
               end
 
               if exceeding
-                errors << Error::SyntaxError.new("Can't have more than 255 arguments.", exceeding.location)
+                errors << Error::SyntaxError.new("Error at #{exceeding.to_value_s}: Can't have more than 255 arguments.", exceeding.location)
               end
             end
 
-            rparen = consume(tokens, :RIGHT_PAREN, "Expected ')' after arguments.")
+            rparen = consume(tokens, :RIGHT_PAREN, "Expect ')' after arguments.")
+            synchronize(tokens) if rparen in { type: :MISSING }
             AST::Call.new(callee: node, arguments: arguments, arguments_location: arguments_location, location: node.location.to(rparen.location))
           else
             right = parse_expression(tokens, infix + 1)
@@ -141,15 +142,81 @@ module Lox
       if peeked in { type: ^type }
         tokens.next
       else
-        errors << Error::SyntaxError.new("Error at '#{peeked.value}': #{message}", peeked.location)
+        errors << Error::SyntaxError.new("Error at #{peeked.to_value_s}: #{message}", peeked.location)
         AST::Token.new(type: :MISSING, location: peeked.location, value: nil)
+      end
+    end
+
+    # A small state machine that accepts an item separated by delimiters until
+    # it hits the end.
+    # 
+    #       +------+
+    #   delimiter  |  +-- delimiter --+
+    #       | V----+  |               |
+    #     +------+ <--+        +---------+
+    # --> | item | -- item --> | delimit |
+    #     +------+ <-- item -- +---------+
+    #        |                  |
+    #      ending --------------+
+    #        |
+    #        V
+    #     +-------+
+    #     ||final||
+    #     +-------+
+    #
+    def parse_list(tokens, item_type, delimiter_type, ending_type, message)
+      state = :item
+
+      loop do
+        case [state, tokens.peek]
+        in [:item, { type: ^item_type }]
+          # Here we were expecting an item and we got an item. We'll yield out
+          # the item to the caller, advance the tokens, and move to the delimit
+          # state.
+          yield tokens.next
+          state = :delimit
+        in [:item, { type: ^delimiter_type }]
+          # Here we were expecting an item and we got a delimiter. We'll yield
+          # out a missing token to the caller (which will be returned by the
+          # consume method), advance the tokens past the delimiter, and keep the
+          # state in the item state.
+          yield consume(tokens, item_type, message)
+          tokens.next
+        in [:item, { type: ^ending_type }]
+          # Here we were expecting an item and we got the ending. We'll yield
+          # out a missing token to the caller to indicate we were missing an
+          # item after the last delimiter, and then return from this method.
+          yield consume(tokens, item_type, message)
+          return
+        in [:delimit, { type: ^item_type } => token]
+          # Here we were expecting a delimiter and we got an item type. In that
+          # case we'll throw in a missing token for the delimiter and switch
+          # back to the item state.
+          consume(tokens, delimiter_type, "Error at #{token.to_value_s}: expected #{delimiter_type}.")
+          state = :item
+        in [:delimit, { type: ^delimiter_type }]
+          # Here we were expecting a delimiter and we got a delimiter. We'll
+          # advance past the delimiter and switch to the item state.
+          tokens.next
+          state = :item
+        in [:delimit, { type: ^ending_type }]
+          # Here we were expecting a delimiter and we got the ending. That's
+          # fine, we can return directly from this method now.
+          return
+        in [_, token]
+          # Here we got something that we don't even handle. In this case we'll
+          # add an error, enter panic mode, and attempt to synchronize.
+          errors << Error::SyntaxError.new("Error at #{token.to_value_s}: #{message}", token.location)
+          synchronize(tokens)
+          return
+        end
       end
     end
 
     # This is the synchronization mechanism. If we've found something that we
     # don't explicitly handle, skip forward until we find something that looks
     # right.
-    def synchronize(tokens, location)
+    def synchronize(tokens)
       loop do
         if tokens.peek in { type: :EOF | :CLASS | :FOR | :FUN | :IF | :PRINT | :RETURN | :VAR | :WHILE }
           return
@@ -175,19 +242,52 @@ module Lox
     end
 
     def parse_declaration(tokens)
-      if tokens.peek in { type: :VAR }
+      case tokens.peek
+      in { type: :FUN }
+        parse_function(tokens, :function)
+      in { type: :VAR }
         parse_var_declaration(tokens)
       else
         parse_statement(tokens)
       end
     end
 
+    def parse_function(tokens, kind)
+      keyword = consume(tokens, :FUN, "Expected 'fun'.")
+      name = consume(tokens, :IDENTIFIER, "Expected #{kind} name.")
+      consume(tokens, :LEFT_PAREN, "Expect '(' after #{kind} name.")
+
+      parameters = []
+      if !(tokens.peek in { type: :RIGHT_PAREN })
+        exceeding = nil
+
+        parse_list(tokens, :IDENTIFIER, :COMMA, :RIGHT_PAREN, "Expected parameter name.") do |token|
+          exceeding ||= tokens.peek if parameters.length >= MAXIMUM_ARGUMENTS
+          parameters << token
+        end
+
+        if exceeding
+          errors << Error::SyntaxError.new("Error at #{exceeding.to_value_s}: Can't have more than 255 parameters.", exceeding.location)
+        end
+      end
+
+      consume(tokens, :RIGHT_PAREN, "Expected ')' after parameters.")
+      body = parse_block_statement(tokens, "Expect '{' before function body.")
+
+      AST::Function.new(
+        name: name.value,
+        parameters: parameters.map(&:value),
+        body: body,
+        location: keyword.location.to(body.location)
+      )
+    end
+
     def parse_var_declaration(tokens)
       keyword = consume(tokens, :VAR, "Expect 'var'.")
 
-      if tokens.peek in { type: :FALSE | :NIL | :THIS | :TRUE, value:, location: }
-        errors << Error::SyntaxError.new("Error at '#{value}': Expect variable name.", location)
-        synchronize(tokens, location)
+      if tokens.peek in { type: :FALSE | :NIL | :THIS | :TRUE, location: } => token
+        errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect variable name.", location)
+        synchronize(tokens)
         nil
       else
         identifier = consume(tokens, :IDENTIFIER, "Expect identifier after 'var'.")
@@ -215,10 +315,12 @@ module Lox
         parse_if_statement(tokens)
       in { type: :PRINT }
         parse_print_statement(tokens)
+      in { type: :RETURN }
+        parse_return_statement(tokens)
       in { type: :WHILE }
         parse_while_statement(tokens)
       in { type: :LEFT_BRACE }
-        parse_block_statement(tokens)
+        parse_block_statement(tokens, "Expect '{'.")
       else
         parse_expression_statement(tokens)
       end
@@ -297,6 +399,21 @@ module Lox
       )
     end
 
+    def parse_return_statement(tokens)
+      keyword = consume(tokens, :RETURN, "Expect 'return'.")
+      value =
+        unless tokens.peek in { type: :SEMICOLON }
+          parse_expression(tokens)
+        end
+
+      semicolon = consume(tokens, :SEMICOLON, "Expect ';' after return value.")
+
+      AST::ReturnStatement.new(
+        value: value,
+        location: keyword.location.to(semicolon.location)
+      )
+    end
+
     def parse_while_statement(tokens)
       keyword = consume(tokens, :WHILE, "Expect 'while'.")
       consume(tokens, :LEFT_PAREN, "Expect '(' after 'while'.")
@@ -315,8 +432,8 @@ module Lox
       )
     end
 
-    def parse_block_statement(tokens)
-      lbrace = consume(tokens, :LEFT_BRACE, "Expect '{'.")
+    def parse_block_statement(tokens, message)
+      lbrace = consume(tokens, :LEFT_BRACE, message)
 
       statements = []
       statements << parse_declaration(tokens) until tokens.peek in { type: :EOF | :RIGHT_BRACE }
@@ -331,7 +448,9 @@ module Lox
     def parse_expression_statement(tokens)
       value = parse_expression(tokens)
       semicolon =
-        unless value in AST::Missing
+        if tokens.previous in { type: :SEMICOLON }
+          tokens.previous
+        elsif !(value in AST::Missing)
           consume(tokens, :SEMICOLON, "Expect ';' after expression.")
         end
 

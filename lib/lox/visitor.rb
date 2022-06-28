@@ -35,6 +35,9 @@ module Lox
       # Visit a ForStatement node.
       alias visit_for_statement visit_child_nodes
 
+      # Visit a Function node.
+      alias visit_function visit_child_nodes
+
       # Visit a Group node.
       alias visit_group visit_child_nodes
 
@@ -52,6 +55,9 @@ module Lox
 
       # Visit a Program node.
       alias visit_program visit_child_nodes
+
+      # Visit a ReturnStatement node.
+      alias visit_return_statement visit_child_nodes
 
       # Visit a Unary node.
       alias visit_unary visit_child_nodes

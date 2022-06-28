@@ -2,22 +2,30 @@
 
 module Lox
   module Type
-    # This represents the false value.
-    class False < Object
-      def self.instance
-        @instance ||= new
+    class Function < Object
+      attr_reader :descriptor, :arity, :closure, :callable
+
+      def initialize(descriptor:, arity:, closure:, &callable)
+        @descriptor = descriptor
+        @arity = arity
+        @closure = closure
+        @callable = callable
       end
 
       #-------------------------------------------------------------------------
       # Runtime methods
       #-------------------------------------------------------------------------
 
-      def to_lox
-        "false"
+      def call(*arguments)
+        callable.call(*arguments)
       end
 
-      def truthy?
-        false
+      def callable?
+        true
+      end
+
+      def to_lox
+        descriptor
       end
 
       #-------------------------------------------------------------------------
@@ -25,7 +33,7 @@ module Lox
       #-------------------------------------------------------------------------
 
       def ==(other)
-        Type.boolean((other in False))
+        Type.boolean(super)
       end
     end
   end

@@ -81,6 +81,20 @@ module Lox
         end
       end
 
+      # Visit a Function node.
+      def visit_function(node)
+        group("function") do
+          q.breakable
+          q.text(node.name)
+
+          q.breakable
+          q.seplist(node.parameters) { |parameter| q.text(parameter) }
+
+          q.breakable
+          visit(node.body)
+        end
+      end
+
       # Visit a Group node.
       def visit_group(node)
         group("group") do
@@ -132,6 +146,16 @@ module Lox
         group("program") do
           q.breakable
           q.seplist(node.statements) { |statement| visit(statement) }
+        end
+      end
+
+      # Visit a ReturnStatement node.
+      def visit_return_statement(node)
+        group("return") do
+          if node.value
+            q.breakable
+            visit(node.value)
+          end
         end
       end
 

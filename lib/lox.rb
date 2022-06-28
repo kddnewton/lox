@@ -10,6 +10,7 @@ require_relative "lox/parser"
 
 require_relative "lox/type"
 require_relative "lox/type/false"
+require_relative "lox/type/function"
 require_relative "lox/type/nil"
 require_relative "lox/type/number"
 require_relative "lox/type/string"
