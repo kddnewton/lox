@@ -3,12 +3,13 @@
 module Lox
   module Type
     class Function < Object
-      attr_reader :descriptor, :arity, :closure, :callable
+      attr_reader :descriptor, :closure, :arity, :is_init, :callable
 
-      def initialize(descriptor:, arity:, closure:, &callable)
+      def initialize(descriptor:, closure:, arity: 0, is_init: false, &callable)
         @descriptor = descriptor
         @arity = arity
         @closure = closure
+        @is_init = is_init
         @callable = callable
       end
 
@@ -19,14 +20,16 @@ module Lox
       def bind(instance)
         Function.new(
           descriptor: descriptor,
-          arity: arity,
           closure: Visitor::Interpreter::Environment.new(parent: closure, variables: { this: instance }),
+          arity: arity,
+          is_init: is_init,
           &callable
         )
       end
 
       def call(*arguments)
-        callable.call(closure, *arguments)
+        result = callable.call(closure, *arguments)
+        is_init ? closure.variables[:this] : result
       end
 
       def callable?

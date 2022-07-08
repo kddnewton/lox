@@ -50,7 +50,7 @@ module Lox
 
       def initialize
         variables = {
-          "clock" => Type::Function.new(descriptor: "<native fn>", arity: 0, closure: environment) {
+          "clock" => Type::Function.new(descriptor: "<native fn>", closure: environment) {
             Type::Number.new(value: Time.now.to_i / 1000)
           }
         }
@@ -141,7 +141,7 @@ module Lox
 
         methods = {}
         node.methods.each do |method|
-          methods[method.name] = create_function(method)
+          methods[method.name] = create_function(method, is_init: method.name == "init")
         end
 
         environment.assign(node.name.value, Type::Class.new(name: node.name.value, methods: methods), node.name.location)
@@ -160,7 +160,7 @@ module Lox
       # Visit a Function node.
       def visit_function(node)
         closure = environment
-        closure.declare(node.name, create_function(node))
+        closure.declare(node.name, create_function(node, is_init: false))
         Type::Nil.instance
       end
 
@@ -220,7 +220,7 @@ module Lox
       def visit_set_expression(node)
         object = visit(node.object)
         if !(object in Type::Instance)
-          raise Error::RuntimeError.new("Error at #{node.name.to_value_s}: Only instances have fields.", node.name.location)
+          raise Error::RuntimeError.new("Only instances have fields.", node.name.location)
         end
 
         object.set(node.name.value, visit(node.value))
@@ -261,8 +261,13 @@ module Lox
 
       private
 
-      def create_function(node)
-        Type::Function.new(descriptor: "<fn #{node.name}>", arity: node.parameters.size, closure: environment) do |closure, *arguments|
+      def create_function(node, is_init:)
+        Type::Function.new(
+          descriptor: "<fn #{node.name}>",
+          closure: environment,
+          arity: node.parameters.size,
+          is_init: is_init
+        ) do |closure, *arguments|
           push_frame(closure) do |environment|
             node.parameters.zip(arguments).each do |(parameter, argument)|
               environment.declare(parameter.value, argument)
@@ -272,7 +277,7 @@ module Lox
               visit_all(node.statements)
               Type::Nil.instance
             rescue LongJump => jump
-              jump.value
+              is_init ? closure.variables[:this] : jump.value
             end
           end
         end

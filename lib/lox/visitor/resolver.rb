@@ -4,11 +4,13 @@ module Lox
   module Visitor
     # This visitor resolves all variable declarations and usages.
     class Resolver < BaseVisitor
-      attr_reader :interpreter, :scopes, :function_type
+      attr_reader :interpreter, :scopes, :class_type, :function_type
 
       def initialize(interpreter)
         @interpreter = interpreter
         @scopes = []
+
+        @class_type = :none
         @function_type = :none
       end
 
@@ -25,14 +27,16 @@ module Lox
 
       # Visit a ClassStatement node.
       def visit_class_statement(node)
-        declare(node.name, node.location)
-        define(node.name)
+        with_class_type(:class) do
+          declare(node.name.value, node.location)
+          define(node.name.value)
 
-        push_scope do |scope|
-          scope[:this] = true
+          push_scope do |scope|
+            scope[:this] = true
 
-          node.methods.each do |method|
-            resolve_function(method, :method)
+            node.methods.each do |method|
+              resolve_function(method, method.name == "init" ? :initializer : :method)
+            end
           end
         end
       end
@@ -55,12 +59,20 @@ module Lox
           interpreter.errors << Error::SyntaxError.new("Error at 'return': Can't return from top-level code.", node.location)
         end
 
+        if node.value && function_type == :initializer
+          interpreter.errors << Error::SyntaxError.new("Error at 'return': Can't return a value from an initializer.", node.location)
+        end
+
         super
       end
 
       # Visit a ThisExpression node.
       def visit_this_expression(node)
-        resolve_local(node, :this)
+        if class_type == :none
+          interpreter.errors << Error::SyntaxError.new("Error at 'this': Can't use 'this' outside of a class.", node.location)
+        else
+          resolve_local(node, :this)
+        end
       end
 
       # Visit a Variable node.
@@ -123,6 +135,15 @@ module Lox
         scopes << scope
         yield scope
         scopes.pop
+      end
+
+      def with_class_type(class_type)
+        current = class_type
+        @class_type = class_type
+
+        yield
+      ensure
+        @class_type = current
       end
 
       def with_function_type(function_type)

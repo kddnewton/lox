@@ -16,18 +16,23 @@ module Lox
       #-------------------------------------------------------------------------
 
       def arity
-        0
+        find_method("init")&.arity || 0
       end
 
-      def call
-        Instance.new(klass: self)
+      def call(*arguments)
+        instance = Instance.new(klass: self)
+        if (method = find_method("init"))
+          method.bind(instance).call(*arguments)
+        end
+
+        instance
       end
 
       def callable?
         true
       end
 
-      def function(name)
+      def find_method(name)
         methods[name]
       end
 
@@ -40,7 +45,7 @@ module Lox
       #-------------------------------------------------------------------------
 
       def ==(other)
-        Type.boolean((other in Class[name: ^(name)]))
+        Type.boolean(super)
       end
     end
   end
