@@ -506,6 +506,29 @@ module Lox
       end
     end
 
+    # This represents the use of the this keyword.
+    class ThisExpression
+      attr_reader :location
+
+      def initialize(location:)
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_this_expression(self)
+      end
+
+      def child_nodes
+        []
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { location: location }
+      end
+    end
+
     # A unary node is a node that represents calling a unary operator on another
     # node. It contains an operator and the child node.
     class Unary

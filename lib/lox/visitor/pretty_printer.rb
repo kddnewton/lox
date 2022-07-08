@@ -195,6 +195,11 @@ module Lox
         end
       end
 
+      # Visit a ThisExpression node.
+      def visit_this_expression(node)
+        q.text("(this)")
+      end
+
       # Visit a Unary node.
       def visit_unary(node)
         group(OPERATORS_NAMES[node.operator.type]) do

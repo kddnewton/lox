@@ -16,8 +16,17 @@ module Lox
       # Runtime methods
       #-------------------------------------------------------------------------
 
+      def bind(instance)
+        Function.new(
+          descriptor: descriptor,
+          arity: arity,
+          closure: Visitor::Interpreter::Environment.new(parent: closure, variables: { this: instance }),
+          &callable
+        )
+      end
+
       def call(*arguments)
-        callable.call(*arguments)
+        callable.call(closure, *arguments)
       end
 
       def callable?

@@ -138,7 +138,13 @@ module Lox
       # Visit a ClassStatement node.
       def visit_class_statement(node)
         environment.declare(node.name.value, nil)
-        environment.assign(node.name.value, Type::Class.new(name: node.name.value), node.name.location)
+
+        methods = {}
+        node.methods.each do |method|
+          methods[method.name] = create_function(method)
+        end
+
+        environment.assign(node.name.value, Type::Class.new(name: node.name.value, methods: methods), node.name.location)
       end
 
       # Visit an Expression node.
@@ -154,24 +160,7 @@ module Lox
       # Visit a Function node.
       def visit_function(node)
         closure = environment
-        closure.declare(
-          node.name,
-          Type::Function.new(descriptor: "<fn #{node.name}>", arity: node.parameters.size, closure: closure) do |*arguments|
-            push_frame(closure) do |environment|
-              node.parameters.zip(arguments).each do |(parameter, argument)|
-                environment.declare(parameter.value, argument)
-              end
-
-              begin
-                visit_all(node.statements)
-                Type::Nil.instance
-              rescue LongJump => jump
-                jump.value
-              end
-            end
-          end
-        )
-
+        closure.declare(node.name, create_function(node))
         Type::Nil.instance
       end
 
@@ -237,6 +226,11 @@ module Lox
         object.set(node.name.value, visit(node.value))
       end
 
+      # Visit a ThisExpression node.
+      def visit_this_expression(node)
+        lookup_variable(:this, node)
+      end
+
       # Visit a Unary node.
       def visit_unary(node)
         case node.operator.type
@@ -249,16 +243,7 @@ module Lox
 
       # Visit a Variable node.
       def visit_variable(node)
-        origin =
-          if locals.key?(node)
-            current = environment
-            locals[node].times { current = current.parent }
-            current
-          else
-            globals
-          end
-
-        origin.fetch(node.name, node.location)
+        lookup_variable(node.name, node)
       end
 
       # Visit a VariableDeclaration node.
@@ -275,6 +260,36 @@ module Lox
       end
 
       private
+
+      def create_function(node)
+        Type::Function.new(descriptor: "<fn #{node.name}>", arity: node.parameters.size, closure: environment) do |closure, *arguments|
+          push_frame(closure) do |environment|
+            node.parameters.zip(arguments).each do |(parameter, argument)|
+              environment.declare(parameter.value, argument)
+            end
+
+            begin
+              visit_all(node.statements)
+              Type::Nil.instance
+            rescue LongJump => jump
+              jump.value
+            end
+          end
+        end
+      end
+
+      def lookup_variable(name, node)
+        origin =
+          if locals.key?(node)
+            current = environment
+            locals[node].times { current = current.parent }
+            current
+          else
+            globals
+          end
+
+        origin.fetch(name, node.location)
+      end
 
       def push_frame(parent = environment)
         current = @environment

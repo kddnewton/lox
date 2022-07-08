@@ -78,6 +78,9 @@ module Lox
         in { type: :STRING, value:, location: }
           tokens.next
           AST::Literal.new(value: Type::String.new(value: value), location: location)
+        in { type: :THIS, location: }
+          tokens.next
+          AST::ThisExpression.new(location: location)
         in { type: :IDENTIFIER, value:, location: }
           tokens.next
           AST::Variable.new(name: value, location: location)

@@ -18,6 +18,8 @@ module Lox
       def get(name, location)
         if fields.key?(name)
           fields[name]
+        elsif (function = klass.function(name))
+          function.bind(self)
         else
           raise Error::RuntimeError.new("Undefined property '#{name}'.", location)
         end

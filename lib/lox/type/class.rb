@@ -4,10 +4,11 @@ module Lox
   module Type
     # This represents a class.
     class Class < Object
-      attr_reader :name
+      attr_reader :name, :methods
 
-      def initialize(name:)
+      def initialize(name:, methods:)
         @name = name
+        @methods = methods
       end
 
       #-------------------------------------------------------------------------
@@ -24,6 +25,10 @@ module Lox
 
       def callable?
         true
+      end
+
+      def function(name)
+        methods[name]
       end
 
       def to_lox

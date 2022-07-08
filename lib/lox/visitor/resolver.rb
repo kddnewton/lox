@@ -15,7 +15,7 @@ module Lox
       # Visit an Assignment node.
       def visit_assignment(node)
         visit(node.value)
-        resolve_local(node.variable)
+        resolve_local(node.variable, node.variable.name)
       end
 
       # Visit a BlockStatement node.
@@ -27,6 +27,14 @@ module Lox
       def visit_class_statement(node)
         declare(node.name, node.location)
         define(node.name)
+
+        push_scope do |scope|
+          scope[:this] = true
+
+          node.methods.each do |method|
+            resolve_function(method, :method)
+          end
+        end
       end
 
       # Visit a ForStatement node.
@@ -50,13 +58,18 @@ module Lox
         super
       end
 
+      # Visit a ThisExpression node.
+      def visit_this_expression(node)
+        resolve_local(node, :this)
+      end
+
       # Visit a Variable node.
       def visit_variable(node)
         if scopes.any? && (scopes.last[node.name] == false)
           interpreter.errors << Error::SyntaxError.new("Error at '#{node.name}': Can't read local variable in its own initializer.", node.location)
         end
 
-        resolve_local(node)
+        resolve_local(node, node.name)
       end
 
       # Visit a VariableDeclaration node.
@@ -96,9 +109,9 @@ module Lox
         end
       end
 
-      def resolve_local(node)
+      def resolve_local(node, name)
         scopes.reverse_each.each_with_index do |scope, index|
-          if scope.key?(node.name)
+          if scope.key?(name)
             interpreter.resolve(node, index)
             return
           end
@@ -106,8 +119,9 @@ module Lox
       end
 
       def push_scope
-        scopes << {}
-        yield
+        scope = {}
+        scopes << scope
+        yield scope
         scopes.pop
       end
 
