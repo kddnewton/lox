@@ -139,12 +139,22 @@ module Lox
       def visit_class_statement(node)
         environment.declare(node.name.value, nil)
 
+        superclass =
+          if node.superclass
+            value = visit(node.superclass)
+            unless value.is_a?(Type::Class)
+              raise Error::RuntimeError.new("Superclass must be a class.", node.superclass.location)
+            end
+
+            value
+          end
+
         methods = {}
         node.methods.each do |method|
           methods[method.name] = create_function(method, is_init: method.name == "init")
         end
 
-        environment.assign(node.name.value, Type::Class.new(name: node.name.value, methods: methods), node.name.location)
+        environment.assign(node.name.value, Type::Class.new(name: node.name.value, superclass: superclass, methods: methods), node.name.location)
       end
 
       # Visit an Expression node.

@@ -31,6 +31,10 @@ module Lox
           declare(node.name.value, node.location)
           define(node.name.value)
 
+          if node.superclass && node.name.value == node.superclass.name
+            interpreter.errors << Error::SyntaxError.new("Error at '#{node.name.value}': A class can't inherit from itself.", node.location)
+          end
+
           push_scope do |scope|
             scope[:this] = true
 

@@ -4,10 +4,11 @@ module Lox
   module Type
     # This represents a class.
     class Class < Object
-      attr_reader :name, :methods
+      attr_reader :name, :superclass, :methods
 
-      def initialize(name:, methods:)
+      def initialize(name:, superclass:, methods:)
         @name = name
+        @superclass = superclass
         @methods = methods
       end
 
@@ -33,7 +34,7 @@ module Lox
       end
 
       def find_method(name)
-        methods[name]
+        methods[name] || superclass&.find_method(name)
       end
 
       def to_lox

@@ -155,10 +155,11 @@ module Lox
 
     # This represents a class declaration.
     class ClassStatement
-      attr_reader :name, :methods, :location
+      attr_reader :name, :superclass, :methods, :location
 
-      def initialize(name:, methods:, location:)
+      def initialize(name:, superclass:, methods:, location:)
         @name = name
+        @superclass = superclass
         @methods = methods
         @location = location
       end
@@ -168,7 +169,7 @@ module Lox
       end
 
       def child_nodes
-        methods
+        [superclass, *methods]
       end
 
       alias deconstruct child_nodes

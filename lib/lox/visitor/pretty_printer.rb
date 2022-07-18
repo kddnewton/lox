@@ -62,6 +62,11 @@ module Lox
           q.breakable
           q.text(node.name.value)
 
+          if node.superclass
+            q.breakable
+            visit(node.superclass)
+          end
+
           q.breakable
           q.seplist(node.methods) { |method| visit(method) }
         end

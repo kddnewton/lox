@@ -266,6 +266,14 @@ module Lox
     def parse_class_declaration(tokens)
       keyword = consume(tokens, :CLASS, "Expect 'class'.")
       name = consume(tokens, :IDENTIFIER, "Expect class name.")
+
+      superclass =
+        if tokens.peek in { type: :LESS }
+          tokens.next
+          supername = consume(tokens, :IDENTIFIER, "Expect superclass name.")
+          AST::Variable.new(name: supername.value, location: supername.location)
+        end
+
       consume(tokens, :LEFT_BRACE, "Expect '{' before class body.")
 
       methods = []
@@ -276,6 +284,7 @@ module Lox
       rbrace = consume(tokens, :RIGHT_BRACE, "Expect '}' after class body.")
       AST::ClassStatement.new(
         name: name,
+        superclass: superclass,
         methods: methods,
         location: keyword.location.to(rbrace.location)
       )
