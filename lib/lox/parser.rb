@@ -61,8 +61,14 @@ module Lox
         in { type: :LEFT_PAREN, location: slocation }
           tokens.next
           expr = parse_expression(tokens)
-          rparen = consume(tokens, :RIGHT_PAREN, "Expected ')' after expression.")
-          AST::Group.new(node: expr, location: slocation.to(rparen.location))
+          elocation =
+            if expr in AST::Missing
+              expr.location
+            else
+              consume(tokens, :RIGHT_PAREN, "Expected ')' after expression.").location
+            end
+
+          AST::Group.new(node: expr, location: slocation.to(elocation))
         in { type: :TRUE, location: }
           tokens.next
           AST::Literal.new(value: Type::True.instance, location: location)
@@ -86,7 +92,10 @@ module Lox
           AST::Variable.new(name: value, location: location)
         in { type: :SUPER, location: }
           tokens.next
-          consume(tokens, :DOT, "Expect '.' after 'super'.")
+          if consume(tokens, :DOT, "Expect '.' after 'super'.") in { type: :MISSING }
+            synchronize(tokens)
+            return AST::Missing.new(location: location)
+          end
 
           method = consume(tokens, :IDENTIFIER, "Expect superclass method name.")
           AST::SuperExpression.new(method: method.value, location: location.to(method.location))
@@ -231,9 +240,11 @@ module Lox
     # This is the synchronization mechanism. If we've found something that we
     # don't explicitly handle, skip forward until we find something that looks
     # right.
-    def synchronize(tokens)
+    def synchronize(tokens, break_on = nil)
       loop do
         if tokens.peek in { type: :EOF | :CLASS | :FOR | :FUN | :IF | :PRINT | :RETURN | :VAR | :WHILE }
+          return
+        elsif break_on && tokens.peek in { type: ^break_on }
           return
         elsif tokens.previous in { type: :SEMICOLON }
           return
@@ -277,7 +288,12 @@ module Lox
         if tokens.peek in { type: :LESS }
           tokens.next
           supername = consume(tokens, :IDENTIFIER, "Expect superclass name.")
-          AST::Variable.new(name: supername.value, location: supername.location)
+
+          if supername in { type: :MISSING }
+            synchronize(tokens, :LEFT_BRACE)
+          else
+            AST::Variable.new(name: supername.value, location: supername.location)
+          end
         end
 
       consume(tokens, :LEFT_BRACE, "Expect '{' before class body.")
@@ -313,7 +329,7 @@ module Lox
           errors << Error::SyntaxError.new("Error at #{exceeding.to_value_s}: Can't have more than 255 parameters.", exceeding.location)
         end
       end
-
+      
       consume(tokens, :RIGHT_PAREN, "Expected ')' after parameters.")
       body = parse_block_statement(tokens, "Expect '{' before function body.")
 
