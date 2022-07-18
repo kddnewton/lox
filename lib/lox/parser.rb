@@ -84,6 +84,12 @@ module Lox
         in { type: :IDENTIFIER, value:, location: }
           tokens.next
           AST::Variable.new(name: value, location: location)
+        in { type: :SUPER, location: }
+          tokens.next
+          consume(tokens, :DOT, "Expect '.' after 'super'.")
+
+          method = consume(tokens, :IDENTIFIER, "Expect superclass method name.")
+          AST::SuperExpression.new(method: method.value, location: location.to(method.location))
         in token
           errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect expression.", token.location)
           tokens.next unless token in { type: :EOF }

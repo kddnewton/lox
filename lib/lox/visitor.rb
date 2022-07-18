@@ -68,6 +68,9 @@ module Lox
       # Visit a SetExpression node.
       alias visit_set_expression visit_child_nodes
 
+      # Visit a SuperExpression node.
+      alias visit_super_expression visit_child_nodes
+
       # Visit a ThisExpression node.
       alias visit_this_expression visit_child_nodes
 

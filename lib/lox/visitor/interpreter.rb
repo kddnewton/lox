@@ -137,8 +137,6 @@ module Lox
 
       # Visit a ClassStatement node.
       def visit_class_statement(node)
-        environment.declare(node.name.value, nil)
-
         superclass =
           if node.superclass
             value = visit(node.superclass)
@@ -149,11 +147,15 @@ module Lox
             value
           end
 
+        environment.declare(node.name.value, nil)
+        @environment = Environment.new(parent: environment, variables: { super: superclass }) if node.superclass
+
         methods = {}
         node.methods.each do |method|
           methods[method.name] = create_function(method, is_init: method.name == "init")
         end
 
+        @environment = @environment.parent if node.superclass
         environment.assign(node.name.value, Type::Class.new(name: node.name.value, superclass: superclass, methods: methods), node.name.location)
       end
 
@@ -234,6 +236,23 @@ module Lox
         end
 
         object.set(node.name.value, visit(node.value))
+      end
+
+      # Visit a SuperExpression node.
+      def visit_super_expression(node)
+        previous, current = nil, environment
+        locals[node].times do
+          previous, current = current, current.parent
+        end
+
+        superclass = current.fetch(:super, node.location)
+        instance = previous.fetch(:this, node.location)
+
+        unless (method = superclass.find_method(node.method))
+          raise Error::RuntimeError.new("Undefined property '#{node.method}'.", node.location)
+        end
+
+        method.bind(instance)
       end
 
       # Visit a ThisExpression node.

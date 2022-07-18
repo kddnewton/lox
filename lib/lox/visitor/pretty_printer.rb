@@ -200,6 +200,14 @@ module Lox
         end
       end
 
+      # Visit a SuperExpression node.
+      def visit_super_expression(node)
+        group("super-expression") do
+          q.breakable
+          q.text(node.method)
+        end
+      end
+
       # Visit a ThisExpression node.
       def visit_this_expression(node)
         q.text("(this)")

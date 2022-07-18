@@ -507,6 +507,30 @@ module Lox
       end
     end
 
+    # This represents the use of the super keyword.
+    class SuperExpression
+      attr_reader :method, :location
+
+      def initialize(method:, location:)
+        @method = method
+        @location = location
+      end
+
+      def accept(visitor)
+        visitor.visit_super_expression(self)
+      end
+
+      def child_nodes
+        []
+      end
+
+      alias deconstruct child_nodes
+
+      def deconstruct_keys(keys)
+        { method: method, location: location }
+      end
+    end
+
     # This represents the use of the this keyword.
     class ThisExpression
       attr_reader :location

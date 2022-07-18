@@ -31,10 +31,16 @@ module Lox
           declare(node.name.value, node.location)
           define(node.name.value)
 
-          if node.superclass && node.name.value == node.superclass.name
-            interpreter.errors << Error::SyntaxError.new("Error at '#{node.name.value}': A class can't inherit from itself.", node.location)
+          if node.superclass
+            if node.name.value == node.superclass.name
+              interpreter.errors << Error::SyntaxError.new("Error at '#{node.name.value}': A class can't inherit from itself.", node.location)
+            end
+
+            @class_type = :subclass
+            visit(node.superclass)
           end
 
+          scopes << { super: true } if node.superclass
           push_scope do |scope|
             scope[:this] = true
 
@@ -42,6 +48,8 @@ module Lox
               resolve_function(method, method.name == "init" ? :initializer : :method)
             end
           end
+
+          scopes.pop if node.superclass
         end
       end
 
@@ -68,6 +76,17 @@ module Lox
         end
 
         super
+      end
+
+      # Visit a SuperExpression node.
+      def visit_super_expression(node)
+        if class_type == :none
+          interpreter.errors << Error::SyntaxError.new("Error at 'super': Can't use 'super' outside of a class.", node.location)
+        elsif class_type != :subclass
+          interpreter.errors << Error::SyntaxError.new("Error at 'super': Can't use 'super' in a class with no superclass.", node.location)
+        end
+
+        resolve_local(node, :super)
       end
 
       # Visit a ThisExpression node.
