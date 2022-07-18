@@ -38,9 +38,10 @@ module Lox
 
     MAXIMUM_ARGUMENTS = 255
 
-    attr_reader :errors
+    attr_reader :builder, :errors
 
-    def initialize
+    def initialize(builder)
+      @builder = builder
       @errors = []
     end
 
@@ -57,7 +58,7 @@ module Lox
         in { type: :BANG | :MINUS => type, location: slocation } => token
           tokens.next
           expr = parse_expression(tokens, Precedence::UNARY)
-          AST::Unary.new(operator: token, node: expr, location: slocation.to(expr.location))
+          builder.on_unary_expression(operator: token, node: expr, location: slocation.to(expr.location))
         in { type: :LEFT_PAREN, location: slocation }
           tokens.next
           expr = parse_expression(tokens)
@@ -68,42 +69,42 @@ module Lox
               consume(tokens, :RIGHT_PAREN, "Expected ')' after expression.").location
             end
 
-          AST::Group.new(node: expr, location: slocation.to(elocation))
+          builder.on_group(node: expr, location: slocation.to(elocation))
         in { type: :TRUE, location: }
           tokens.next
-          AST::Literal.new(value: Type::True.instance, location: location)
+          builder.on_true(location: location)
         in { type: :FALSE, location: }
           tokens.next
-          AST::Literal.new(value: Type::False.instance, location: location)
+          builder.on_false(location: location)
         in { type: :NIL, location: }
           tokens.next
-          AST::Literal.new(value: Type::Nil.instance, location: location)
+          builder.on_nil(location: location)
         in { type: :NUMBER, value:, location: }
           tokens.next
-          AST::Literal.new(value: Type::Number.new(value: value), location: location)
+          builder.on_number(value: value, location: location)
         in { type: :STRING, value:, location: }
           tokens.next
-          AST::Literal.new(value: Type::String.new(value: value), location: location)
+          builder.on_string(value: value, location: location)
         in { type: :THIS, location: }
           tokens.next
-          AST::ThisExpression.new(location: location)
+          builder.on_this_expression(location: location)
         in { type: :IDENTIFIER, value:, location: }
           tokens.next
-          AST::Variable.new(name: value, location: location)
+          builder.on_variable(name: value, location: location)
         in { type: :SUPER, location: }
           tokens.next
           if consume(tokens, :DOT, "Expect '.' after 'super'.") in { type: :MISSING }
             synchronize(tokens)
-            return AST::Missing.new(location: location)
+            return builder.on_missing(location: location)
           end
 
           method = consume(tokens, :IDENTIFIER, "Expect superclass method name.")
-          AST::SuperExpression.new(method: method.value, location: location.to(method.location))
+          builder.on_super_expression(method: method.value, location: location.to(method.location))
         in token
           errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect expression.", token.location)
           tokens.next unless token in { type: :EOF }
           synchronize(tokens)
-          return AST::Missing.new(location: token.location)
+          return builder.on_missing(location: token.location)
         end
 
       while (infix = Precedence.infix_for(tokens.peek)) && (precedence <= infix)
@@ -114,16 +115,16 @@ module Lox
             value = parse_expression(tokens, infix)
 
             case node
-            in AST::Variable
-              AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
             in AST::GetExpression
-              AST::SetExpression.new(object: node.object, name: node.name, value: value, location: node.location.to(value.location))
+              builder.on_set_expression(object: node.object, name: node.name, value: value, location: node.location.to(value.location))
+            in AST::Variable
+              builder.on_assignment(variable: node, value: value, location: node.location.to(value.location))
             in AST::Literal[value: Type::True | Type::False | Type::Nil => value]
               errors << Error::SyntaxError.new("Error at '#{value.to_lox}': Expect variable name.", node.location)
-              AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
+              builder.on_assignment(variable: node, value: value, location: node.location.to(value.location))
             else
               errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Invalid assignment target.", token.location)
-              AST::Assignment.new(variable: node, value: value, location: node.location.to(value.location))
+              builder.on_assignment(variable: node, value: value, location: node.location.to(value.location))
             end
           in { type: :LEFT_PAREN, location: arguments_location }
             arguments = []
@@ -145,13 +146,13 @@ module Lox
 
             rparen = consume(tokens, :RIGHT_PAREN, "Expect ')' after arguments.")
             synchronize(tokens) if rparen in { type: :MISSING }
-            AST::Call.new(callee: node, arguments: arguments, arguments_location: arguments_location, location: node.location.to(rparen.location))
+            builder.on_call(callee: node, arguments: arguments, arguments_location: arguments_location, location: node.location.to(rparen.location))
           in { type: :DOT }
             name = consume(tokens, :IDENTIFIER, "Expect property name after '.'.")
-            AST::GetExpression.new(object: node, name: name, location: node.location.to(name.location))
+            builder.on_get_expression(object: node, name: name, location: node.location.to(name.location))
           else
             right = parse_expression(tokens, infix + 1)
-            AST::Binary.new(left: node, operator: token, right: right, location: node.location.to(right.location))
+            builder.on_binary(left: node, operator: token, right: right, location: node.location.to(right.location))
           end
       end
 
@@ -261,7 +262,7 @@ module Lox
         statements << parse_declaration(tokens)
       end
 
-      AST::Program.new(
+      builder.on_program(
         statements: statements,
         location: AST::Location.new(start: 0, finish: tokens.peek.location.finish)
       )
@@ -280,6 +281,7 @@ module Lox
       end
     end
 
+    # class Name {}
     def parse_class_declaration(tokens)
       keyword = consume(tokens, :CLASS, "Expect 'class'.")
       name = consume(tokens, :IDENTIFIER, "Expect class name.")
@@ -292,7 +294,7 @@ module Lox
           if supername in { type: :MISSING }
             synchronize(tokens, :LEFT_BRACE)
           else
-            AST::Variable.new(name: supername.value, location: supername.location)
+            builder.on_variable(name: supername.value, location: supername.location)
           end
         end
 
@@ -304,7 +306,7 @@ module Lox
       end
 
       rbrace = consume(tokens, :RIGHT_BRACE, "Expect '}' after class body.")
-      AST::ClassStatement.new(
+      builder.on_class_statement(
         name: name,
         superclass: superclass,
         methods: methods,
@@ -312,6 +314,9 @@ module Lox
       )
     end
 
+    # name(param1, param2) {
+    #   body
+    # }
     def parse_function(tokens, kind, start_location = nil)
       name = consume(tokens, :IDENTIFIER, "Expected #{kind} name.")
       consume(tokens, :LEFT_PAREN, "Expect '(' after #{kind} name.")
@@ -333,7 +338,7 @@ module Lox
       consume(tokens, :RIGHT_PAREN, "Expected ')' after parameters.")
       body = parse_block_statement(tokens, "Expect '{' before function body.")
 
-      AST::Function.new(
+      builder.on_function(
         name: name.value,
         parameters: parameters,
         statements: body.statements,
@@ -341,6 +346,7 @@ module Lox
       )
     end
 
+    # var a = 1;
     def parse_var_declaration(tokens)
       keyword = consume(tokens, :VAR, "Expect 'var'.")
 
@@ -357,8 +363,7 @@ module Lox
         end
 
         semicolon = consume(tokens, :SEMICOLON, "Expect ';' after variable declaration.")
-      
-        AST::VariableDeclaration.new(
+        builder.on_variable_declaration(
           name: identifier.value,
           initializer: initializer,
           location: keyword.location.to(semicolon.location)
@@ -385,6 +390,9 @@ module Lox
       end
     end
 
+    # for (initializer; condition; increment) {
+    #   body
+    # }
     def parse_for_statement(tokens)
       keyword = consume(tokens, :FOR, "Expect 'for'.")
       consume(tokens, :LEFT_PAREN, "Expect '(' after 'for'.")
@@ -412,7 +420,7 @@ module Lox
           parse_statement(tokens)
         end
 
-      AST::ForStatement.new(
+      builder.on_for_statement(
         initializer: initializer,
         condition: condition,
         increment: increment,
@@ -421,6 +429,11 @@ module Lox
       )
     end
 
+    # if condition
+    #   then_branch
+    # else
+    #   else_branch
+    # end
     def parse_if_statement(tokens)
       keyword = consume(tokens, :IF, "Expect 'if'.")
       consume(tokens, :LEFT_PAREN, "Expect '(' after 'if'.")
@@ -435,7 +448,7 @@ module Lox
           parse_statement(tokens)
         end
 
-      AST::IfStatement.new(
+      builder.on_if_statement(
         condition: condition,
         then_branch: then_branch,
         else_branch: else_branch,
@@ -443,6 +456,7 @@ module Lox
       )
     end
 
+    # print value;
     def parse_print_statement(tokens)
       keyword = consume(tokens, :PRINT, "Expect 'print'.")
       value = parse_expression(tokens)
@@ -452,12 +466,13 @@ module Lox
           consume(tokens, :SEMICOLON, "Expect ';' after value.")
         end
 
-      AST::PrintStatement.new(
+      builder.on_print_statement(
         value: value,
         location: keyword.location.to((semicolon || value).location)
       )
     end
 
+    # return value;
     def parse_return_statement(tokens)
       keyword = consume(tokens, :RETURN, "Expect 'return'.")
       value =
@@ -467,12 +482,15 @@ module Lox
 
       semicolon = consume(tokens, :SEMICOLON, "Expect ';' after return value.")
 
-      AST::ReturnStatement.new(
+      builder.on_return_statement(
         value: value,
         location: keyword.location.to(semicolon.location)
       )
     end
 
+    # while condition
+    #   statement
+    # end
     def parse_while_statement(tokens)
       keyword = consume(tokens, :WHILE, "Expect 'while'.")
       consume(tokens, :LEFT_PAREN, "Expect '(' after 'while'.")
@@ -484,13 +502,14 @@ module Lox
           body = parse_statement(tokens)
         end
 
-      AST::WhileStatement.new(
+      builder.on_while_statement(
         condition: condition,
         body: body,
         location: keyword.location.to(body.location)
       )
     end
 
+    # {}
     def parse_block_statement(tokens, message)
       lbrace = consume(tokens, :LEFT_BRACE, message)
 
@@ -498,12 +517,13 @@ module Lox
       statements << parse_declaration(tokens) until tokens.peek in { type: :EOF | :RIGHT_BRACE }
       rbrace = consume(tokens, :RIGHT_BRACE, "Expect '}' after block.")
 
-      AST::BlockStatement.new(
+      builder.on_block_statement(
         statements: statements,
         location: lbrace.location.to(rbrace.location)
       )
     end
 
+    # 1 + 1;
     def parse_expression_statement(tokens)
       value = parse_expression(tokens)
       semicolon =
@@ -513,7 +533,7 @@ module Lox
           consume(tokens, :SEMICOLON, "Expect ';' after expression.")
         end
 
-      AST::Expression.new(
+      builder.on_expression_statement(
         value: value,
         location: value.location.to((semicolon || value).location)
       )

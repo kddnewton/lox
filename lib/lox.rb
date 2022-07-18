@@ -8,6 +8,8 @@ require_relative "lox/error"
 require_relative "lox/lexer"
 require_relative "lox/parser"
 
+require_relative "lox/parser/builder"
+
 require_relative "lox/type"
 require_relative "lox/type/class"
 require_relative "lox/type/false"
@@ -30,7 +32,7 @@ module Lox
     # source into a tree and then walks it to interpret it. The return value of
     # this function is the exit code of the program.
     def interpret(source)
-      parser = Lox::Parser.new
+      parser = Lox::Parser.new(Lox::Parser::Builder.new)
       program = parser.parse(source)
       handle_syntax_errors(source, parser.errors)
 

@@ -25,10 +25,10 @@ in "chap04_scanning"
     puts "#{token.type} #{source[token.location.range]} #{suffix}"
   end
 in "chap06_parsing"
-  expr = Lox::Parser.new.parse_expression(Lox::Lexer.new(source))
+  expr = Lox::Parser.new(Lox::Parser::Builder.new).parse_expression(Lox::Lexer.new(source))
   puts PP.new(+"").then { |q| expr.accept(Lox::Visitor::PrettyPrinter.new(q)); q.flush; q.output }
 in "chap07_evaluating"
-  expr = Lox::Parser.new.parse_expression(Lox::Lexer.new(source))
+  expr = Lox::Parser.new(Lox::Parser::Builder.new).parse_expression(Lox::Lexer.new(source))
   puts expr.accept(Lox::Visitor::Interpreter.new).to_lox
 else
   exit Lox.interpret(source)
