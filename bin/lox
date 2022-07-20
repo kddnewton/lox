@@ -31,6 +31,6 @@ in "chap07_evaluating"
   expr = Lox::Parser.new(Lox::Parser::Builder.new).parse_expression(Lox::Lexer.new(source))
   puts expr.accept(Lox::Visitor::Interpreter.new).to_lox
 else
-  # exit Lox.interpret(source)
-  exit Lox.evaluate(source)
+  exit Lox.interpret(source)
+  # exit Lox.evaluate(source)
 end
