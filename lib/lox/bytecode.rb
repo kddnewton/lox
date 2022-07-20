@@ -20,6 +20,23 @@ module Lox
         @chunk = chunk
       end
 
+      def disassemble
+        puts "== %s ==" % chunk.name
+
+        offset = 0
+        instructions.each_with_index do |instruction, index|
+          print "%04d " % offset
+
+          if offset > 0 && chunk.line_numbers[index] == chunk.line_numbers[index - 1]
+            print "   | "
+          else
+            print "%4d " % chunk.line_numbers[index]
+          end
+
+          offset += instruction.accept(self)
+        end
+      end
+
       # Visit an OpAdd instruction.
       def visit_add(instruction)
         puts "OP_ADD"
@@ -86,67 +103,50 @@ module Lox
 
       def initialize(chunk:)
         @chunk = chunk
-
-        @stack = Array.new(256) { nil }
-        @offset = 0
+        @stack = []
       end 
 
       def evaluate
-        chunk.instructions.each do |instruction|
-          instruction.accept(self)
-        end
+        chunk.instructions.each { |instruction| visit(instruction) }
       end
 
       # Visit an OpAdd instruction.
       def visit_add(instruction)
-        right, left = pop, pop
-        push(left + right)
+        left, right = stack.pop(2)
+        stack.push(left + right)
       end
 
       # Visit an OpConstant instruction.
       def visit_constant(instruction)
-        push(chunk.constants[instruction.index])
+        stack.push(chunk.constants[instruction.index])
       end
 
       # Visit an OpDivide instruction.
       def visit_divide(instruction)
-        right, left = pop, pop
-        push(left / right)
+        left, right = stack.pop(2)
+        stack.push(left / right)
       end
 
       # Visit an OpMultiply instruction.
       def visit_multiply(instruction)
-        right, left = pop, pop
-        push(left * right)
+        left, right = stack.pop(2)
+        stack.push(left * right)
       end
 
       # Visit an OpNegate instruction.
       def visit_negate(instruction)
-        push(-pop)
+        stack.push(-stack.pop)
       end
 
       # Visit an OpReturn instruction.
       def visit_return(instruction)
-        pp stack[0]
         INTERPRET_OK
       end
 
       # Visit an OpSubtract instruction.
       def visit_subtract(instruction)
-        right, left = pop, pop
-        push(left - right)
-      end
-
-      private
-
-      def pop
-        @offset -= 1
-        stack[@offset]
-      end
-
-      def push(value)
-        stack[@offset] = value
-        @offset += 1
+        left, right = stack.pop(2)
+        stack.push(left - right)
       end
     end
 
@@ -162,22 +162,11 @@ module Lox
       end
 
       def disassemble
-        puts "== %s ==" % name
+        Dissassembler.new(chunk: self).disassemble
+      end
 
-        visitor = Dissassembler.new(chunk: self)
-        offset = 0
-
-        instructions.each_with_index do |instruction, index|
-          print "%04d " % offset
-
-          if offset > 0 && line_numbers[index] == line_numbers[index - 1]
-            print "   | "
-          else
-            print "%4d " % line_numbers[index]
-          end
-
-          offset += instruction.accept(visitor)
-        end
+      def evaluate
+        Evaluator.new(chunk: self).evaluate
       end
 
       def push_instruction(instruction:, line_number:)
@@ -253,9 +242,6 @@ module Lox
         @chunk = Chunk.new(name: "main")
       end
 
-      def on_assignment(variable:, value:, location:)
-      end
-
       def on_binary(left:, operator:, right:, location:)
         instruction =
           case operator
@@ -270,42 +256,10 @@ module Lox
           end
 
         chunk.push_instruction(instruction:, line_number: 0)
-      end
-
-      def on_block_statement(statements:, location:)
-      end
-
-      def on_call(callee:, arguments:, arguments_location:, location:)
-      end
-
-      def on_class_statement(name:, superclass:, methods:, location:)
-      end
-
-      def on_expression_statement(value:, location:)
-      end
-
-      def on_false(location:)
-      end
-
-      def on_for_statement(initializer:, condition:, increment:, body:, location:)
-      end
-
-      def on_function(name:, parameters:, statements:, location:)
-      end
-
-      def on_get_expression(object:, name:, location:)
+        instruction
       end
 
       def on_group(node:, location:)
-      end
-
-      def on_if_statement(condition:, then_branch:, else_branch:, location:)
-      end
-
-      def on_missing(location:)
-      end
-
-      def on_nil(location:)
       end
 
       def on_number(value:, location:)
@@ -313,45 +267,25 @@ module Lox
 
         chunk.push_instruction(instruction:, line_number: 0)
         chunk.constants << Type::Number.new(value: value)
-      end
-
-      def on_print_statement(value:, location:)
+        instruction
       end
 
       def on_program(statements:, location:)
         instruction = Instructions::OpReturn.new
 
         chunk.push_instruction(instruction:, line_number: 0)
-      end
-
-      def on_return_statement(value:, location:)
-      end
-
-      def on_set_expression(object:, name:, value:, location:)
-      end
-
-      def on_string(value:, location:)
-      end
-
-      def on_super_expression(method:, location:)
-      end
-
-      def on_this_expression(location:)
-      end
-
-      def on_true(location:)
+        instruction
       end
 
       def on_unary_expression(operator:, node:, location:)
-      end
+        instruction =
+          case operator
+          in { type: :MINUS }
+            Instructions::OpNegate.new
+          end
 
-      def on_variable(name:, location:)
-      end
-
-      def on_variable_declaration(name:, initializer:, location:)
-      end
-
-      def on_while_statement(condition:, body:, location:)
+        chunk.push_instruction(instruction:, line_number: 0)
+        instruction
       end
     end
   end
