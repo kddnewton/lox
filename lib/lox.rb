@@ -61,7 +61,10 @@ module Lox
       handle_syntax_errors(source, parser.errors)
 
       compiler.chunk.disassemble
-      Lox::Bytecode::Evaluator.new(chunk: compiler.chunk).evaluate
+      evaluator = Lox::Bytecode::Evaluator.new(chunk: compiler.chunk)
+
+      evaluator.evaluate
+      puts evaluator.globals
       0
     end
 

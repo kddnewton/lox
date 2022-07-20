@@ -51,6 +51,12 @@ module Lox
         2
       end
 
+      # Visit an OpDefineGlobal instruction.
+      def visit_define_global(instruction)
+        puts "OP_DEFINE_GLOBAL"
+        1
+      end
+
       # Visit an OpDivide instruction.
       def visit_divide(instruction)
         puts "OP_DIVIDE"
@@ -66,6 +72,12 @@ module Lox
       # Visit an OpFalse instruction.
       def visit_false(instruction)
         puts "OP_FALSE"
+        1
+      end
+
+      # Visit an OpGetGlobal instruction.
+      def visit_get_global(instruction)
+        puts "OP_GET_GLOBAL"
         1
       end
 
@@ -161,11 +173,12 @@ module Lox
 
       STACK_MAX = 256
 
-      attr_reader :chunk, :stack, :offset
+      attr_reader :chunk, :stack, :globals
 
       def initialize(chunk:)
         @chunk = chunk
         @stack = []
+        @globals = {}
       end 
 
       def evaluate
@@ -183,6 +196,12 @@ module Lox
         stack.push(chunk.constants[instruction.index])
       end
 
+      # Visit an OpDefineGlobal instruction.
+      def visit_define_global(instruction)
+        value, name = stack.pop(2)
+        globals[name.value] = value
+      end
+
       # Visit an OpDivide instruction.
       def visit_divide(instruction)
         left, right = stack.pop(2)
@@ -198,6 +217,11 @@ module Lox
       # Visit an OpFalse instruction.
       def visit_false(instruction)
         stack.push(Type::False.instance)
+      end
+
+      # Visit an OpGetGlobal instruction.
+      def visit_get_global(instruction)
+        stack.push(globals[stack.pop.value])
       end
 
       # Visit an OpGreater instruction.
@@ -307,6 +331,13 @@ module Lox
         end
       end
 
+      # Define a global variable.
+      class OpDefineGlobal
+        def accept(visitor)
+          visitor.visit_define_global(self)
+        end
+      end
+
       # A binary division instruction.
       class OpDivide
         def accept(visitor)
@@ -325,6 +356,13 @@ module Lox
       class OpFalse
         def accept(visitor)
           visitor.visit_false(self)
+        end
+      end
+
+      # Get a global variable and push it onto the stack.
+      class OpGetGlobal
+        def accept(visitor)
+          visitor.visit_get_global(self)
         end
       end
 
@@ -500,6 +538,20 @@ module Lox
             Instructions::OpNegate.new
           end
 
+        chunk.push_instruction(instruction:, line_number: line_number(location))
+      end
+
+      def on_variable_declaration(name:, initializer:, location:)
+        unless initializer
+          instruction = Instructions::OpNil.new
+          chunk.push_instruction(instruction:, line_number: line_number(location))
+        end
+
+        instruction = Instructions::OpConstant.new(index: chunk.constants.size)
+        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.constants << Type::String.new(value: name)
+
+        instruction = Instructions::OpDefineGlobal.new
         chunk.push_instruction(instruction:, line_number: line_number(location))
       end
 
