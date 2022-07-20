@@ -39,6 +39,6 @@ in "chap17_compiling" | "chap18_types"
 
   puts evaluator.stack[0].to_lox
 else
-  exit Lox.interpret(source)
-  # exit Lox.evaluate(source)
+  # exit Lox.interpret(source)
+  exit Lox.evaluate(source)
 end

@@ -24,7 +24,7 @@ module Lox
         puts "== %s ==" % chunk.name
 
         offset = 0
-        instructions.each_with_index do |instruction, index|
+        chunk.instructions.each_with_index do |instruction, index|
           print "%04d " % offset
 
           if offset > 0 && chunk.line_numbers[index] == chunk.line_numbers[index - 1]
@@ -105,6 +105,18 @@ module Lox
         1
       end
 
+      # Visit an OpPop instruction.
+      def visit_pop(instruction)
+        puts "OP_POP"
+        1
+      end
+
+      # Visit an OpPrint instruction.
+      def visit_print(instruction)
+        puts "OP_PRINT"
+        1
+      end
+
       # Visit an OpReturn instruction.
       def visit_return(instruction)
         puts "OP_RETURN"
@@ -133,6 +145,8 @@ module Lox
           print "nil"
         in Type::Number[value:]
           print "%g" % value
+        in Type::String[value:]
+          print "%s" % value
         in Type::True
           print "true"
         end
@@ -217,6 +231,16 @@ module Lox
       # Visit an OpNot instruction.
       def visit_not(instruction)
         stack.push(!stack.pop)
+      end
+
+      # Visit an OpPop instruction.
+      def visit_pop(instruction)
+        stack.pop
+      end
+
+      # Visit an OpPrint instruction.
+      def visit_print(instruction)
+        puts stack.pop.to_lox
       end
 
       # Visit an OpReturn instruction.
@@ -346,6 +370,20 @@ module Lox
         end
       end
 
+      # Pop a value off the stack.
+      class OpPop
+        def accept(visitor)
+          visitor.visit_pop(self)
+        end
+      end
+
+      # Print the top value on the stack.
+      class OpPrint
+        def accept(visitor)
+          visitor.visit_print(self)
+        end
+      end
+
       # Return from the current function.
       class OpReturn
         def accept(visitor)
@@ -408,6 +446,11 @@ module Lox
         end
       end
 
+      def on_expression_statement(value:, location:)
+        instruction = Instructions::OpPop.new
+        chunk.push_instruction(instruction:, line_number: line_number(location))
+      end
+
       def on_false(location:)
         instruction = Instructions::OpFalse.new
         chunk.push_instruction(instruction:, line_number: line_number(location))
@@ -427,9 +470,20 @@ module Lox
         chunk.constants << Type::Number.new(value: value)
       end
 
+      def on_print_statement(value:, location:)
+        instruction = Instructions::OpPrint.new
+        chunk.push_instruction(instruction:, line_number: line_number(location))
+      end
+
       def on_program(statements:, location:)
         instruction = Instructions::OpReturn.new
         chunk.push_instruction(instruction:, line_number: line_number(location))
+      end
+
+      def on_string(value:, location:)
+        instruction = Instructions::OpConstant.new(index: chunk.constants.size)
+        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.constants << Type::String.new(value: value)
       end
 
       def on_true(location:)
