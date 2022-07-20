@@ -4,7 +4,6 @@ require "bigdecimal"
 require "bigdecimal/util"
 
 require_relative "lox/ast"
-require_relative "lox/bytecode"
 require_relative "lox/error"
 require_relative "lox/lexer"
 require_relative "lox/parser"
@@ -25,6 +24,14 @@ require_relative "lox/visitor"
 require_relative "lox/visitor/interpreter"
 require_relative "lox/visitor/pretty_printer"
 require_relative "lox/visitor/resolver"
+
+require_relative "lox/bytecode/chunk"
+require_relative "lox/bytecode/compiler"
+require_relative "lox/bytecode/instructions"
+require_relative "lox/bytecode/visitor"
+
+require_relative "lox/bytecode/disassembler"
+require_relative "lox/bytecode/interpreter"
 
 # The top-level class that provides all of the functionality of the language.
 module Lox
@@ -60,12 +67,13 @@ module Lox
       parser.parse(source)
       handle_syntax_errors(source, parser.errors)
 
-      compiler.chunk.disassemble
-      evaluator = Lox::Bytecode::Evaluator.new(chunk: compiler.chunk)
-
-      evaluator.evaluate
-      puts evaluator.globals
+      Lox::Bytecode::Interpreter.new(chunk: compiler.chunk).interpret
       0
+    rescue Lox::Error::SyntaxError => error
+      handle_syntax_errors(source, [error])
+    rescue Lox::Error::RuntimeError => error
+      warn(error.detailed_message(source: source))
+      Lox::Error::RuntimeError::EXIT_CODE
     end
 
     private
