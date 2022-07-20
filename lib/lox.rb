@@ -54,7 +54,7 @@ module Lox
     # the given source into a set of bytecode instructions and then executes
     # them. The return value of this function is the exit code of the program.
     def evaluate(source)
-      compiler = Lox::Bytecode::Compiler.new
+      compiler = Lox::Bytecode::Compiler.new(source)
 
       parser = Lox::Parser.new(compiler)
       parser.parse(source)

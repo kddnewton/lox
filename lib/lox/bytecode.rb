@@ -371,37 +371,40 @@ module Lox
     # A class responsible for handling the stream coming from the parser and
     # compiling it into bytecode instructions.
     class Compiler
-      attr_reader :chunk
+      attr_reader :source, :chunk
 
-      def initialize
+      def initialize(source)
+        @source = source
         @chunk = Chunk.new(name: "main")
       end
 
       def on_binary(left:, operator:, right:, location:)
+        line_number = line_number(location)
+
         case operator
         in { type: :PLUS }
-          chunk.push_instruction(instruction: Instructions::OpAdd.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpAdd.new, line_number:)
         in { type: :MINUS }
-          chunk.push_instruction(instruction: Instructions::OpSubtract.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpSubtract.new, line_number:)
         in { type: :STAR }
-          chunk.push_instruction(instruction: Instructions::OpMultiply.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpMultiply.new, line_number:)
         in { type: :SLASH }
-          chunk.push_instruction(instruction: Instructions::OpDivide.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpDivide.new, line_number:)
         in { type: :BANG_EQUAL }
-          chunk.push_instruction(instruction: Instructions::OpEqual.new, line_number: 0)
-          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpEqual.new, line_number:)
+          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number:)
         in { type: :EQUAL_EQUAL }
-          chunk.push_instruction(instruction: Instructions::OpEqual.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpEqual.new, line_number:)
         in { type: :GREATER }
-          chunk.push_instruction(instruction: Instructions::OpGreater.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpGreater.new, line_number:)
         in { type: :GREATER_EQUAL }
-          chunk.push_instruction(instruction: Instructions::OpLess.new, line_number: 0)
-          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpLess.new, line_number:)
+          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number:)
         in { type: :LESS }
-          chunk.push_instruction(instruction: Instructions::OpLess.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpLess.new, line_number:)
         in { type: :LESS_EQUAL }
-          chunk.push_instruction(instruction: Instructions::OpGreater.new, line_number: 0)
-          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpGreater.new, line_number:)
+          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number:)
         end
       end
 
@@ -411,14 +414,14 @@ module Lox
       def on_number(value:, location:)
         instruction = Instructions::OpConstant.new(index: chunk.constants.size)
 
-        chunk.push_instruction(instruction:, line_number: 0)
+        chunk.push_instruction(instruction:, line_number: line_number(location))
         chunk.constants << Type::Number.new(value: value)
       end
 
       def on_program(statements:, location:)
         instruction = Instructions::OpReturn.new
 
-        chunk.push_instruction(instruction:, line_number: 0)
+        chunk.push_instruction(instruction:, line_number: line_number(location))
       end
 
       def on_unary_expression(operator:, node:, location:)
@@ -430,7 +433,13 @@ module Lox
             Instructions::OpNegate.new
           end
 
-        chunk.push_instruction(instruction:, line_number: 0)
+        chunk.push_instruction(instruction:, line_number: line_number(location))
+      end
+
+      private
+
+      def line_number(location)
+        source[0...location.start].count("\n") + 1
       end
     end
   end
