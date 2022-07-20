@@ -135,6 +135,12 @@ module Lox
         1
       end
 
+      # Visit an OpSetGlobal instruction.
+      def visit_set_global(instruction)
+        puts "OP_SET_GLOBAL"
+        1
+      end
+
       # Visit an OpSubtract instruction.
       def visit_subtract(instruction)
         puts "OP_SUBTRACT"
@@ -270,6 +276,12 @@ module Lox
       # Visit an OpReturn instruction.
       def visit_return(instruction)
         INTERPRET_OK
+      end
+
+      # Visit an OpSetGlobal instruction.
+      def visit_set_global(instruction)
+        name, value = stack.pop(2)
+        globals[name.value] = value
       end
 
       # Visit an OpSubtract instruction.
@@ -429,6 +441,13 @@ module Lox
         end
       end
 
+      # Set a global variable.
+      class OpSetGlobal
+        def accept(visitor)
+          visitor.visit_set_global(self)
+        end
+      end
+
       # A binary subtraction instruction.
       class OpSubtract
         def accept(visitor)
@@ -454,8 +473,13 @@ module Lox
         @chunk = Chunk.new(name: "main")
       end
 
+      def on_assignment(variable:, value:, location:)
+        instruction = Instructions::OpSetGlobal.new
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
+      end
+
       def on_binary(left:, operator:, right:, location:)
-        line_number = line_number(location)
+        line_number = line_number(location.start)
 
         case operator
         in { type: :PLUS }
@@ -486,12 +510,12 @@ module Lox
 
       def on_expression_statement(value:, location:)
         instruction = Instructions::OpPop.new
-        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
       end
 
       def on_false(location:)
         instruction = Instructions::OpFalse.new
-        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
       end
 
       def on_group(node:, location:)
@@ -499,34 +523,34 @@ module Lox
 
       def on_nil(location:)
         instruction = Instructions::OpNil.new
-        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
       end
 
       def on_number(value:, location:)
         instruction = Instructions::OpConstant.new(index: chunk.constants.size)
-        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
         chunk.constants << Type::Number.new(value: value)
       end
 
       def on_print_statement(value:, location:)
         instruction = Instructions::OpPrint.new
-        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
       end
 
       def on_program(statements:, location:)
         instruction = Instructions::OpReturn.new
-        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.push_instruction(instruction:, line_number: line_number(location.finish))
       end
 
       def on_string(value:, location:)
         instruction = Instructions::OpConstant.new(index: chunk.constants.size)
-        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
         chunk.constants << Type::String.new(value: value)
       end
 
       def on_true(location:)
         instruction = Instructions::OpTrue.new
-        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
       end
 
       def on_unary_expression(operator:, node:, location:)
@@ -538,27 +562,38 @@ module Lox
             Instructions::OpNegate.new
           end
 
-        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
+      end
+
+      def on_variable(name:, location:)
+        instruction = Instructions::OpConstant.new(index: chunk.constants.size)
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
+        chunk.constants << Type::String.new(value: name)
+
+        unless Lexer.new(source[location.start..]).tokens.take(2).last in { type: :EQUAL }
+          instruction = Instructions::OpGetGlobal.new
+          chunk.push_instruction(instruction:, line_number: line_number(location.start))
+        end
       end
 
       def on_variable_declaration(name:, initializer:, location:)
         unless initializer
           instruction = Instructions::OpNil.new
-          chunk.push_instruction(instruction:, line_number: line_number(location))
+          chunk.push_instruction(instruction:, line_number: line_number(location.start))
         end
 
         instruction = Instructions::OpConstant.new(index: chunk.constants.size)
-        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
         chunk.constants << Type::String.new(value: name)
 
         instruction = Instructions::OpDefineGlobal.new
-        chunk.push_instruction(instruction:, line_number: line_number(location))
+        chunk.push_instruction(instruction:, line_number: line_number(location.start))
       end
 
       private
 
-      def line_number(location)
-        source[0...location.start].count("\n") + 1
+      def line_number(offset)
+        source[0...offset].count("\n") + 1
       end
     end
   end
