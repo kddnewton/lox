@@ -57,6 +57,30 @@ module Lox
         1
       end
 
+      # Visit an OpEqual instruction.
+      def visit_equal(instruction)
+        puts "OP_EQUAL"
+        1
+      end
+
+      # Visit an OpFalse instruction.
+      def visit_false(instruction)
+        puts "OP_FALSE"
+        1
+      end
+
+      # Visit an OpGreater instruction.
+      def visit_greater(instruction)
+        puts "OP_GREATER"
+        1
+      end
+
+      # Visit an OpLess instruction.
+      def visit_less(instruction)
+        puts "OP_LESS"
+        1
+      end
+
       # Visit an OpMultiply instruction.
       def visit_multiply(instruction)
         puts "OP_MULTIPLY"
@@ -66,6 +90,18 @@ module Lox
       # Visit an OpNegate instruction.
       def visit_negate(instruction)
         puts "OP_NEGATE"
+        1
+      end
+
+      # Visit an OpNil instruction.
+      def visit_nil(instruction)
+        puts "OP_NIL"
+        1
+      end
+
+      # Visit an OpNot instruction.
+      def visit_not(instruction)
+        puts "OP_NOT"
         1
       end
 
@@ -81,12 +117,24 @@ module Lox
         1
       end
 
+      # Visit an OpTrue instruction.
+      def visit_true(instruction)
+        puts "OP_TRUE"
+        1
+      end
+
       private
 
       def print_value(object)
         case object
+        in Type::False
+          print "false"
+        in Type::Nil
+          print "nil"
         in Type::Number[value:]
           print "%g" % value
+        in Type::True
+          print "true"
         end
       end
     end
@@ -127,6 +175,29 @@ module Lox
         stack.push(left / right)
       end
 
+      # Visit an OpEqual instruction.
+      def visit_equal(instruction)
+        left, right = stack.pop(2)
+        stack.push(left == right)
+      end
+
+      # Visit an OpFalse instruction.
+      def visit_false(instruction)
+        stack.push(Type::False.instance)
+      end
+
+      # Visit an OpGreater instruction.
+      def visit_greater(instruction)
+        left, right = stack.pop(2)
+        stack.push(left > right)
+      end
+
+      # Visit an OpLess instruction.
+      def visit_less(instruction)
+        left, right = stack.pop(2)
+        stack.push(left < right)
+      end
+
       # Visit an OpMultiply instruction.
       def visit_multiply(instruction)
         left, right = stack.pop(2)
@@ -138,6 +209,16 @@ module Lox
         stack.push(-stack.pop)
       end
 
+      # Visit an OpNil instruction.
+      def visit_nil(instruction)
+        stack.push(Type::Nil.instance)
+      end
+
+      # Visit an OpNot instruction.
+      def visit_not(instruction)
+        stack.push(!stack.pop)
+      end
+
       # Visit an OpReturn instruction.
       def visit_return(instruction)
         INTERPRET_OK
@@ -147,6 +228,11 @@ module Lox
       def visit_subtract(instruction)
         left, right = stack.pop(2)
         stack.push(left - right)
+      end
+
+      # Visit an OpTrue instruction.
+      def visit_true(instruction)
+        stack.push(Type::True.instance)
       end
     end
 
@@ -204,6 +290,34 @@ module Lox
         end
       end
 
+      # Call == on the top two values on the stack.
+      class OpEqual
+        def accept(visitor)
+          visitor.visit_equal(self)
+        end
+      end
+
+      # Push false onto the stack.
+      class OpFalse
+        def accept(visitor)
+          visitor.visit_false(self)
+        end
+      end
+
+      # Call > on the top two values on the stack.
+      class OpGreater
+        def accept(visitor)
+          visitor.visit_greater(self)
+        end
+      end
+
+      # Call < on the top two values on the stack.
+      class OpLess
+        def accept(visitor)
+          visitor.visit_less(self)
+        end
+      end
+
       # A binary multiplication instruction.
       class OpMultiply
         def accept(visitor)
@@ -215,6 +329,20 @@ module Lox
       class OpNegate
         def accept(visitor)
           visitor.visit_negate(self)
+        end
+      end
+
+      # Push nil onto the stack.
+      class OpNil
+        def accept(visitor)
+          visitor.visit_nil(self)
+        end
+      end
+
+      # Call ! on a value.
+      class OpNot
+        def accept(visitor)
+          visitor.visit_not(self)
         end
       end
 
@@ -231,6 +359,13 @@ module Lox
           visitor.visit_subtract(self)
         end
       end
+
+      # Push true onto the stack.
+      class OpTrue
+        def accept(visitor)
+          visitor.visit_true(self)
+        end
+      end
     end
 
     # A class responsible for handling the stream coming from the parser and
@@ -243,20 +378,31 @@ module Lox
       end
 
       def on_binary(left:, operator:, right:, location:)
-        instruction =
-          case operator
-          in { type: :PLUS }
-            Instructions::OpAdd.new
-          in { type: :MINUS }
-            Instructions::OpSubtract.new
-          in { type: :STAR }
-            Instructions::OpMultiply.new
-          in { type: :SLASH }
-            Instructions::OpDivide.new
-          end
-
-        chunk.push_instruction(instruction:, line_number: 0)
-        instruction
+        case operator
+        in { type: :PLUS }
+          chunk.push_instruction(instruction: Instructions::OpAdd.new, line_number: 0)
+        in { type: :MINUS }
+          chunk.push_instruction(instruction: Instructions::OpSubtract.new, line_number: 0)
+        in { type: :STAR }
+          chunk.push_instruction(instruction: Instructions::OpMultiply.new, line_number: 0)
+        in { type: :SLASH }
+          chunk.push_instruction(instruction: Instructions::OpDivide.new, line_number: 0)
+        in { type: :BANG_EQUAL }
+          chunk.push_instruction(instruction: Instructions::OpEqual.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number: 0)
+        in { type: :EQUAL_EQUAL }
+          chunk.push_instruction(instruction: Instructions::OpEqual.new, line_number: 0)
+        in { type: :GREATER }
+          chunk.push_instruction(instruction: Instructions::OpGreater.new, line_number: 0)
+        in { type: :GREATER_EQUAL }
+          chunk.push_instruction(instruction: Instructions::OpLess.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number: 0)
+        in { type: :LESS }
+          chunk.push_instruction(instruction: Instructions::OpLess.new, line_number: 0)
+        in { type: :LESS_EQUAL }
+          chunk.push_instruction(instruction: Instructions::OpGreater.new, line_number: 0)
+          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number: 0)
+        end
       end
 
       def on_group(node:, location:)
@@ -267,25 +413,24 @@ module Lox
 
         chunk.push_instruction(instruction:, line_number: 0)
         chunk.constants << Type::Number.new(value: value)
-        instruction
       end
 
       def on_program(statements:, location:)
         instruction = Instructions::OpReturn.new
 
         chunk.push_instruction(instruction:, line_number: 0)
-        instruction
       end
 
       def on_unary_expression(operator:, node:, location:)
         instruction =
           case operator
+          in { type: :BANG }
+            Instructions::OpNot.new
           in { type: :MINUS }
             Instructions::OpNegate.new
           end
 
         chunk.push_instruction(instruction:, line_number: 0)
-        instruction
       end
     end
   end

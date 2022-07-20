@@ -30,7 +30,7 @@ in "chap06_parsing"
 in "chap07_evaluating"
   expr = Lox::Parser.new(Lox::Parser::Builder.new).parse_expression(Lox::Lexer.new(source))
   puts expr.accept(Lox::Visitor::Interpreter.new).to_lox
-in "chap17_compiling"
+in "chap17_compiling" | "chap18_types"
   compiler = Lox::Bytecode::Compiler.new
   Lox::Parser.new(compiler).parse_expression(Lox::Lexer.new(source))
 
