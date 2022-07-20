@@ -4,6 +4,7 @@ require "bigdecimal"
 require "bigdecimal/util"
 
 require_relative "lox/ast"
+require_relative "lox/bytecode"
 require_relative "lox/error"
 require_relative "lox/lexer"
 require_relative "lox/parser"
@@ -47,6 +48,21 @@ module Lox
     rescue Lox::Error::RuntimeError => error
       warn(error.detailed_message(source: source))
       Lox::Error::RuntimeError::EXIT_CODE
+    end
+
+    # This is the main entry point for the lox bytecode interpreter. It parses
+    # the given source into a set of bytecode instructions and then executes
+    # them. The return value of this function is the exit code of the program.
+    def evaluate(source)
+      compiler = Lox::Bytecode::Compiler.new
+
+      parser = Lox::Parser.new(compiler)
+      parser.parse(source)
+      handle_syntax_errors(source, parser.errors)
+
+      compiler.chunk.disassemble
+      Lox::Bytecode::Evaluator.new(chunk: compiler.chunk).evaluate
+      0
     end
 
     private

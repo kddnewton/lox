@@ -152,7 +152,7 @@ module Lox
             builder.on_get_expression(object: node, name: name, location: node.location.to(name.location))
           else
             right = parse_expression(tokens, infix + 1)
-            builder.on_binary(left: node, operator: token, right: right, location: node.location.to(right.location))
+            builder.on_binary(left: node, operator: token, right: right, location: nil) # node.location.to(right.location))
           end
       end
 
@@ -535,7 +535,7 @@ module Lox
 
       builder.on_expression_statement(
         value: value,
-        location: value.location.to((semicolon || value).location)
+        location: nil # value.location.to((semicolon || value).location)
       )
     end
   end
