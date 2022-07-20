@@ -408,19 +408,32 @@ module Lox
         end
       end
 
+      def on_false(location:)
+        instruction = Instructions::OpFalse.new
+        chunk.push_instruction(instruction:, line_number: line_number(location))
+      end
+
       def on_group(node:, location:)
+      end
+
+      def on_nil(location:)
+        instruction = Instructions::OpNil.new
+        chunk.push_instruction(instruction:, line_number: line_number(location))
       end
 
       def on_number(value:, location:)
         instruction = Instructions::OpConstant.new(index: chunk.constants.size)
-
         chunk.push_instruction(instruction:, line_number: line_number(location))
         chunk.constants << Type::Number.new(value: value)
       end
 
       def on_program(statements:, location:)
         instruction = Instructions::OpReturn.new
+        chunk.push_instruction(instruction:, line_number: line_number(location))
+      end
 
+      def on_true(location:)
+        instruction = Instructions::OpTrue.new
         chunk.push_instruction(instruction:, line_number: line_number(location))
       end
 
