@@ -38,16 +38,17 @@ module Lox
 
     MAXIMUM_ARGUMENTS = 255
 
-    attr_reader :builder, :errors
+    attr_reader :source, :builder, :errors
 
-    def initialize(builder)
+    def initialize(source, builder)
+      @source = source
       @builder = builder
       @errors = []
     end
 
     # This parses a source string and returns the correspond syntax tree.
-    def parse(source)
-      parse_program(Lexer.new(source, self))
+    def parse
+      parse_program(Lexer.new(source, self)).node
     end
 
     # This parses an expression at or above the current level of precedence. It is
@@ -58,53 +59,53 @@ module Lox
         in { type: :BANG | :MINUS => type, location: slocation } => token
           tokens.next
           expr = parse_expression(tokens, Precedence::UNARY)
-          builder.on_unary_expression(operator: token, node: expr, location: slocation.to(expr.location))
+          dispatch_unary_expression(operator: token, node: expr.node, location: slocation.to(expr.location))
         in { type: :LEFT_PAREN, location: slocation }
           tokens.next
           expr = parse_expression(tokens)
           elocation =
-            if expr in AST::Missing
+            if expr.node in { type: :missing }
               expr.location
             else
               consume(tokens, :RIGHT_PAREN, "Expected ')' after expression.").location
             end
 
-          builder.on_group(node: expr, location: slocation.to(elocation))
+          dispatch_group(node: expr.node, location: slocation.to(elocation))
         in { type: :TRUE, location: }
           tokens.next
-          builder.on_true(location: location)
+          dispatch_true(location:)
         in { type: :FALSE, location: }
           tokens.next
-          builder.on_false(location: location)
+          dispatch_false(location:)
         in { type: :NIL, location: }
           tokens.next
-          builder.on_nil(location: location)
+          dispatch_nil(location:)
         in { type: :NUMBER, value:, location: }
           tokens.next
-          builder.on_number(value: value, location: location)
+          dispatch_number(value:, location:)
         in { type: :STRING, value:, location: }
           tokens.next
-          builder.on_string(value: value, location: location)
+          dispatch_string(value:, location:)
         in { type: :THIS, location: }
           tokens.next
-          builder.on_this_expression(location: location)
-        in { type: :IDENTIFIER, value:, location: }
+          dispatch_this_expression(location:)
+        in { type: :IDENTIFIER, value: name, location: }
           tokens.next
-          builder.on_variable(name: value, location: location)
+          dispatch_variable(name:, next_token: tokens.peek, location:)
         in { type: :SUPER, location: }
           tokens.next
           if consume(tokens, :DOT, "Expect '.' after 'super'.") in { type: :MISSING }
             synchronize(tokens)
-            return builder.on_missing(location: location)
+            return dispatch_missing(location: location)
           end
 
           method = consume(tokens, :IDENTIFIER, "Expect superclass method name.")
-          builder.on_super_expression(method: method.value, location: location.to(method.location))
+          dispatch_super_expression(method: method.value, location: location.to(method.location))
         in token
-          errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect expression.", token.location)
+          errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect expression.", line_number(token.location))
           tokens.next unless token in { type: :EOF }
           synchronize(tokens)
-          return builder.on_missing(location: token.location)
+          return dispatch_missing(location: token.location)
         end
 
       while (infix = Precedence.infix_for(tokens.peek)) && (precedence <= infix)
@@ -114,17 +115,17 @@ module Lox
           in { type: :EQUAL }
             value = parse_expression(tokens, infix)
 
-            case node
-            in AST::GetExpression
-              builder.on_set_expression(object: node.object, name: node.name, value: value, location: node.location.to(value.location))
-            in AST::Variable
-              builder.on_assignment(variable: node, value: value, location: node.location.to(value.location))
-            in AST::Literal[value: Type::True | Type::False | Type::Nil => value]
-              errors << Error::SyntaxError.new("Error at '#{value.to_lox}': Expect variable name.", node.location)
-              builder.on_assignment(variable: node, value: value, location: node.location.to(value.location))
+            case node.type
+            in :get_expression
+              dispatch_set_expression(object: node.node.object, name: node.node.name, value: value.node, location: node.location.to(value.location))
+            in :variable
+              dispatch_assignment(variable: node.node, value: value.node, location: node.location.to(value.location))
+            in :true | :false | :nil
+              errors << Error::SyntaxError.new("Error at '#{node.value.to_lox}': Expect variable name.", line_number(node.location))
+              dispatch_assignment(variable: node.node, value: value.node, location: node.location.to(value.location))
             else
-              errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Invalid assignment target.", token.location)
-              builder.on_assignment(variable: node, value: value, location: node.location.to(value.location))
+              errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Invalid assignment target.", line_number(token.location))
+              dispatch_assignment(variable: node.node, value: value.node, location: node.location.to(value.location))
             end
           in { type: :LEFT_PAREN, location: arguments_location }
             arguments = []
@@ -140,19 +141,19 @@ module Lox
               end
 
               if exceeding
-                errors << Error::SyntaxError.new("Error at #{exceeding.to_value_s}: Can't have more than 255 arguments.", exceeding.location)
+                errors << Error::SyntaxError.new("Error at #{exceeding.to_value_s}: Can't have more than 255 arguments.", line_number(exceeding.location))
               end
             end
 
             rparen = consume(tokens, :RIGHT_PAREN, "Expect ')' after arguments.")
             synchronize(tokens) if rparen in { type: :MISSING }
-            builder.on_call(callee: node, arguments: arguments, arguments_location: arguments_location, location: node.location.to(rparen.location))
+            dispatch_call(callee: node.node, arguments: arguments.map(&:node), arguments_location:, location: node.location.to(rparen.location))
           in { type: :DOT }
             name = consume(tokens, :IDENTIFIER, "Expect property name after '.'.")
-            builder.on_get_expression(object: node, name: name, location: node.location.to(name.location))
+            dispatch_get_expression(object: node.node, name: name, location: node.location.to(name.location))
           else
             right = parse_expression(tokens, infix + 1)
-            builder.on_binary(left: node, operator: token, right: right, location: node.location.to(right.location))
+            dispatch_binary(left: node.node, operator: token, right: right.node, location: node.location.to(right.location))
           end
       end
 
@@ -161,13 +162,21 @@ module Lox
 
     private
 
+    #---------------------------------------------------------------------------
+    # Parsing helpers
+    #---------------------------------------------------------------------------
+
+    def line_number(location)
+      source[0...location.start].count("\n") + 1
+    end
+
     def consume(tokens, type, message)
       peeked = tokens.peek
 
       if peeked in { type: ^type }
         tokens.next
       else
-        errors << Error::SyntaxError.new("Error at #{peeked.to_value_s}: #{message}", peeked.location)
+        errors << Error::SyntaxError.new("Error at #{peeked.to_value_s}: #{message}", line_number(peeked.location))
         AST::Token.new(type: :MISSING, location: peeked.location, value: nil)
       end
     end
@@ -231,7 +240,7 @@ module Lox
         in [_, token]
           # Here we got something that we don't even handle. In this case we'll
           # add an error, enter panic mode, and attempt to synchronize.
-          errors << Error::SyntaxError.new("Error at #{token.to_value_s}: #{message}", token.location)
+          errors << Error::SyntaxError.new("Error at #{token.to_value_s}: #{message}", line_number(token.location))
           synchronize(tokens)
           return
         end
@@ -255,6 +264,10 @@ module Lox
       end
     end
 
+    #---------------------------------------------------------------------------
+    # Parse node types and call dispatch methods
+    #---------------------------------------------------------------------------
+
     def parse_program(tokens)
       statements = []
       
@@ -262,8 +275,8 @@ module Lox
         statements << parse_declaration(tokens)
       end
 
-      builder.on_program(
-        statements: statements,
+      dispatch_program(
+        statements: statements.compact.map(&:node),
         location: AST::Location.new(start: 0, finish: tokens.peek.location.finish)
       )
     end
@@ -293,8 +306,9 @@ module Lox
 
           if supername in { type: :MISSING }
             synchronize(tokens, :LEFT_BRACE)
+            nil
           else
-            builder.on_variable(name: supername.value, location: supername.location)
+            dispatch_variable(name: supername.value, next_token: tokens.peek, location: supername.location)
           end
         end
 
@@ -306,10 +320,10 @@ module Lox
       end
 
       rbrace = consume(tokens, :RIGHT_BRACE, "Expect '}' after class body.")
-      builder.on_class_statement(
+      dispatch_class_statement(
         name: name,
-        superclass: superclass,
-        methods: methods,
+        superclass: superclass&.node,
+        methods: methods.map(&:node),
         location: keyword.location.to(rbrace.location)
       )
     end
@@ -331,17 +345,17 @@ module Lox
         end
 
         if exceeding
-          errors << Error::SyntaxError.new("Error at #{exceeding.to_value_s}: Can't have more than 255 parameters.", exceeding.location)
+          errors << Error::SyntaxError.new("Error at #{exceeding.to_value_s}: Can't have more than 255 parameters.", line_number(exceeding.location))
         end
       end
       
       consume(tokens, :RIGHT_PAREN, "Expected ')' after parameters.")
       body = parse_block_statement(tokens, "Expect '{' before function body.")
 
-      builder.on_function(
+      dispatch_function(
         name: name.value,
         parameters: parameters,
-        statements: body.statements,
+        statements: body.node.statements,
         location: (start_location || name.location).to(body.location)
       )
     end
@@ -351,21 +365,21 @@ module Lox
       keyword = consume(tokens, :VAR, "Expect 'var'.")
 
       if tokens.peek in { type: :FALSE | :NIL | :THIS | :TRUE, location: } => token
-        errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect variable name.", location)
+        errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect variable name.", line_number(location))
         synchronize(tokens)
         nil
       else
         identifier = consume(tokens, :IDENTIFIER, "Expect identifier after 'var'.")
-
-        if tokens.peek in { type: :EQUAL }
-          tokens.next
-          initializer = parse_expression(tokens)
-        end
+        initializer =
+          if tokens.peek in { type: :EQUAL }
+            tokens.next
+            parse_expression(tokens)
+          end
 
         semicolon = consume(tokens, :SEMICOLON, "Expect ';' after variable declaration.")
-        builder.on_variable_declaration(
+        dispatch_variable_declaration(
           name: identifier.value,
-          initializer: initializer,
+          initializer: initializer&.node,
           location: keyword.location.to(semicolon.location)
         )
       end
@@ -409,22 +423,20 @@ module Lox
         end
 
       condition = parse_expression(tokens) unless (tokens.peek in { type: :SEMICOLON })
-      consume(tokens, :SEMICOLON, "Expect ';' after loop condition.") unless (condition in AST::Missing)
+      consume(tokens, :SEMICOLON, "Expect ';' after loop condition.") unless (condition in { type: :missing })
 
       increment = parse_expression(tokens) unless (tokens.peek in { type: :RIGHT_PAREN })
       body =
-        if increment in AST::Missing
-          nil
-        else
+        unless increment in { type: :missing }
           consume(tokens, :RIGHT_PAREN, "Expect ')' after for clauses.")
           parse_statement(tokens)
         end
 
-      builder.on_for_statement(
-        initializer: initializer,
-        condition: condition,
-        increment: increment,
-        body: body,
+      dispatch_for_statement(
+        initializer: initializer&.node,
+        condition: condition&.node,
+        increment: increment&.node,
+        body: body&.node,
         location: keyword.location.to((body || increment || condition || initializer || keyword).location)
       )
     end
@@ -448,10 +460,10 @@ module Lox
           parse_statement(tokens)
         end
 
-      builder.on_if_statement(
-        condition: condition,
-        then_branch: then_branch,
-        else_branch: else_branch,
+      dispatch_if_statement(
+        condition: condition.node,
+        then_branch: then_branch.node,
+        else_branch: else_branch&.node,
         location: keyword.location.to((else_branch || then_branch).location)
       )
     end
@@ -462,12 +474,12 @@ module Lox
       value = parse_expression(tokens)
 
       semicolon =
-        unless value in AST::Missing
+        unless value in { type: :missing }
           consume(tokens, :SEMICOLON, "Expect ';' after value.")
         end
 
-      builder.on_print_statement(
-        value: value,
+      dispatch_print_statement(
+        value: value.node,
         location: keyword.location.to((semicolon || value).location)
       )
     end
@@ -482,8 +494,8 @@ module Lox
 
       semicolon = consume(tokens, :SEMICOLON, "Expect ';' after return value.")
 
-      builder.on_return_statement(
-        value: value,
+      dispatch_return_statement(
+        value: value&.node,
         location: keyword.location.to(semicolon.location)
       )
     end
@@ -497,15 +509,15 @@ module Lox
 
       condition = parse_expression(tokens)
       body =
-        unless condition in AST::Missing
+        unless condition in { type: :missing }
           consume(tokens, :RIGHT_PAREN, "Expect ')' after condition.")
-          body = parse_statement(tokens)
+          parse_statement(tokens)
         end
 
-      builder.on_while_statement(
-        condition: condition,
-        body: body,
-        location: keyword.location.to(body.location)
+      dispatch_while_statement(
+        condition: condition.node,
+        body: body&.node,
+        location: keyword.location.to((body || condition).location)
       )
     end
 
@@ -517,8 +529,8 @@ module Lox
       statements << parse_declaration(tokens) until tokens.peek in { type: :EOF | :RIGHT_BRACE }
       rbrace = consume(tokens, :RIGHT_BRACE, "Expect '}' after block.")
 
-      builder.on_block_statement(
-        statements: statements,
+      dispatch_block_statement(
+        statements: statements.map(&:node),
         location: lbrace.location.to(rbrace.location)
       )
     end
@@ -529,14 +541,167 @@ module Lox
       semicolon =
         if tokens.previous in { type: :SEMICOLON }
           tokens.previous
-        elsif !(value in AST::Missing)
+        elsif !(value in { type: :missing })
           consume(tokens, :SEMICOLON, "Expect ';' after expression.")
         end
 
-      builder.on_expression_statement(
-        value: value,
+      dispatch_expression_statement(
+        value: value.node,
         location: value.location.to((semicolon || value).location)
       )
+    end
+
+    #---------------------------------------------------------------------------
+    # Dispatch nodes to builder, return values we can work with up the tree.
+    #---------------------------------------------------------------------------
+
+    class DispatchResult
+      attr_reader :type, :node, :location
+
+      def initialize(type:, node:, location:)
+        @type = type
+        @node = node
+        @location = location
+      end
+
+      def deconstruct_keys(keys)
+        { type:, node:, location: }
+      end
+    end
+
+    def dispatch_assignment(variable:, value:, location:)
+      node = builder.on_assignment(variable:, value:, location:)
+      DispatchResult.new(type: :assignment, node:, location:)
+    end
+
+    def dispatch_binary(left:, operator:, right:, location:)
+      node = builder.on_binary(left:, operator:, right:, location:)
+      DispatchResult.new(type: :binary, node:, location:)
+    end
+
+    def dispatch_block_statement(statements:, location:)
+      node = builder.on_block_statement(statements:, location:)
+      DispatchResult.new(type: :block_statement, node:, location:)
+    end
+
+    def dispatch_call(callee:, arguments:, arguments_location:, location:)
+      node = builder.on_call(callee:, arguments:, arguments_location:, location:)
+      DispatchResult.new(type: :call, node:, location:)
+    end
+
+    def dispatch_class_statement(name:, superclass:, methods:, location:)
+      node = builder.on_class_statement(name:, superclass:, methods:, location:)
+      DispatchResult.new(type: :class_statement, node:, location:)
+    end
+
+    def dispatch_expression_statement(value:, location:)
+      node = builder.on_expression_statement(value:, location:)
+      DispatchResult.new(type: :expression_statement, node:, location:)
+    end
+
+    def dispatch_function(name:, parameters:, statements:, location:)
+      node = builder.on_function(name:, parameters:, statements:, location:)
+      DispatchResult.new(type: :function, node:, location:)
+    end
+
+    def dispatch_number(value:, location:)
+      node = builder.on_number(value:, location:)
+      DispatchResult.new(type: :number, node:, location:)
+    end
+
+    def dispatch_false(location:)
+      node = builder.on_false(location:)
+      DispatchResult.new(type: :false, node:, location:)
+    end
+
+    def dispatch_for_statement(initializer:, condition:, increment:, body:, location:)
+      node = builder.on_for_statement(initializer:, condition:, increment:, body:, location:)
+      DispatchResult.new(type: :for_statement, node:, location:)
+    end
+
+    def dispatch_get_expression(object:, name:, location:)
+      node = builder.on_get_expression(object:, name:, location:)
+      DispatchResult.new(type: :get_expression, node:, location:)
+    end
+
+    def dispatch_group(node:, location:)
+      node = builder.on_group(node:, location:)
+      DispatchResult.new(type: :group, node:, location:)
+    end
+
+    def dispatch_if_statement(condition:, then_branch:, else_branch:, location:)
+      node = builder.on_if_statement(condition:, then_branch:, else_branch:, location:)
+      DispatchResult.new(type: :if_statement, node:, location:)
+    end
+
+    def dispatch_missing(location:)
+      node = builder.on_missing(location:)
+      DispatchResult.new(type: :missing, node:, location:)
+    end
+
+    def dispatch_nil(location:)
+      node = builder.on_nil(location:)
+      DispatchResult.new(type: :nil, node:, location:)
+    end
+
+    def dispatch_print_statement(value:, location:)
+      node = builder.on_print_statement(value:, location:)
+      DispatchResult.new(type: :print_statement, node:, location:)
+    end
+
+    def dispatch_program(statements:, location:)
+      node = builder.on_program(statements:, location:)
+      DispatchResult.new(type: :program, node:, location:)
+    end
+
+    def dispatch_return_statement(value:, location:)
+      node = builder.on_return_statement(value:, location:)
+      DispatchResult.new(type: :return_statement, node:, location:)
+    end
+
+    def dispatch_set_expression(object:, name:, value:, location:)
+      node = builder.on_set_expression(object:, name:, value:, location:)
+      DispatchResult.new(type: :set_expression, node:, location:)
+    end
+
+    def dispatch_string(value:, location:)
+      node = builder.on_string(value:, location:)
+      DispatchResult.new(type: :string, node:, location:)
+    end
+
+    def dispatch_super_expression(method:, location:)
+      node = builder.on_super_expression(method:, location:)
+      DispatchResult.new(type: :super_expression, node:, location:)
+    end
+
+    def dispatch_this_expression(location:)
+      node = builder.on_this_expression(location:)
+      DispatchResult.new(type: :this_expression, node:, location:)
+    end
+
+    def dispatch_true(location:)
+      node = builder.on_true(location:)
+      DispatchResult.new(type: :true, node:, location:)
+    end
+
+    def dispatch_unary_expression(operator:, node:, location:)
+      node = builder.on_unary_expression(operator:, node:, location:)
+      DispatchResult.new(type: :unary_expression, node:, location:)
+    end
+
+    def dispatch_variable(name:, next_token:, location:)
+      node = builder.on_variable(name:, next_token:, location:)
+      DispatchResult.new(type: :variable, node:, location:)
+    end
+
+    def dispatch_variable_declaration(name:, initializer:, location:)
+      node = builder.on_variable_declaration(name:, initializer:, location:)
+      DispatchResult.new(type: :variable_declaration, node:, location:)
+    end
+
+    def dispatch_while_statement(condition:, body:, location:)
+      node = builder.on_while_statement(condition:, body:, location:)
+      DispatchResult.new(type: :while_statement, node:, location:)
     end
   end
 end

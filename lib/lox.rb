@@ -25,6 +25,14 @@ require_relative "lox/visitor/interpreter"
 require_relative "lox/visitor/pretty_printer"
 require_relative "lox/visitor/resolver"
 
+require_relative "lox/bytecode/chunk"
+require_relative "lox/bytecode/compiler"
+require_relative "lox/bytecode/instructions"
+require_relative "lox/bytecode/visitor"
+
+require_relative "lox/bytecode/disassembler"
+require_relative "lox/bytecode/interpreter"
+
 # The top-level class that provides all of the functionality of the language.
 module Lox
   class << self
@@ -32,8 +40,8 @@ module Lox
     # source into a tree and then walks it to interpret it. The return value of
     # this function is the exit code of the program.
     def interpret(source)
-      parser = Lox::Parser.new(Lox::Parser::Builder.new)
-      program = parser.parse(source)
+      parser = Lox::Parser.new(source, Lox::Parser::Builder.new)
+      program = parser.parse
       handle_syntax_errors(source, parser.errors)
 
       interpreter = Lox::Visitor::Interpreter.new
@@ -41,6 +49,25 @@ module Lox
       handle_syntax_errors(source, interpreter.errors)
 
       program.accept(interpreter)
+      0
+    rescue Lox::Error::SyntaxError => error
+      handle_syntax_errors(source, [error])
+    rescue Lox::Error::RuntimeError => error
+      warn(error.detailed_message(source: source))
+      Lox::Error::RuntimeError::EXIT_CODE
+    end
+
+    # This is the main entry point for the lox bytecode interpreter. It parses
+    # the given source into a set of bytecode instructions and then executes
+    # them. The return value of this function is the exit code of the program.
+    def evaluate(source)
+      compiler = Lox::Bytecode::Compiler.new(source)
+
+      parser = Lox::Parser.new(source, compiler)
+      parser.parse
+      handle_syntax_errors(source, parser.errors)
+
+      Lox::Bytecode::Interpreter.new(chunk: compiler.chunk).interpret
       0
     rescue Lox::Error::SyntaxError => error
       handle_syntax_errors(source, [error])

@@ -25,11 +25,21 @@ in "chap04_scanning"
     puts "#{token.type} #{source[token.location.range]} #{suffix}"
   end
 in "chap06_parsing"
-  expr = Lox::Parser.new(Lox::Parser::Builder.new).parse_expression(Lox::Lexer.new(source))
+  expr = Lox::Parser.new(source, Lox::Parser::Builder.new).parse_expression(Lox::Lexer.new(source))
   puts PP.new(+"").then { |q| expr.accept(Lox::Visitor::PrettyPrinter.new(q)); q.flush; q.output }
 in "chap07_evaluating"
-  expr = Lox::Parser.new(Lox::Parser::Builder.new).parse_expression(Lox::Lexer.new(source))
+  expr = Lox::Parser.new(source, Lox::Parser::Builder.new).parse_expression(Lox::Lexer.new(source))
   puts expr.accept(Lox::Visitor::Interpreter.new).to_lox
-else
-  exit Lox.interpret(source)
+in "chap17_compiling" | "chap18_types" | "chap19_strings" | "chap20_hash"
+  compiler = Lox::Bytecode::Compiler.new(source)
+  Lox::Parser.new(source, compiler).parse_expression(Lox::Lexer.new(source))
+
+  interpreter = Lox::Bytecode::Interpreter.new(chunk: compiler.chunk)
+  interpreter.interpret
+
+  puts interpreter.stack[0].to_lox
+in nil
+  exit Lox.evaluate(source)
+in /^chap(\d+)_/
+  exit $1.to_i < 17 ? Lox.interpret(source) : Lox.evaluate(source)
 end

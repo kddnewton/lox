@@ -15,13 +15,13 @@ module Lox
       # Runtime methods
       #-------------------------------------------------------------------------
 
-      def get(name, location)
+      def get(name, line_number)
         if fields.key?(name)
           fields[name]
         elsif (method = klass.find_method(name))
           method.bind(self)
         else
-          raise Error::RuntimeError.new("Undefined property '#{name}'.", location)
+          raise Error::RuntimeError.new("Undefined property '#{name}'.", line_number)
         end
       end
 
