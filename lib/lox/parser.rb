@@ -38,15 +38,16 @@ module Lox
 
     MAXIMUM_ARGUMENTS = 255
 
-    attr_reader :builder, :errors
+    attr_reader :source, :builder, :errors
 
-    def initialize(builder)
+    def initialize(source, builder)
+      @source = source
       @builder = builder
       @errors = []
     end
 
     # This parses a source string and returns the correspond syntax tree.
-    def parse(source)
+    def parse
       parse_program(Lexer.new(source, self)).node
     end
 
@@ -101,7 +102,7 @@ module Lox
           method = consume(tokens, :IDENTIFIER, "Expect superclass method name.")
           dispatch_super_expression(method: method.value, location: location.to(method.location))
         in token
-          errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect expression.", token.location)
+          errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect expression.", line_number(token.location))
           tokens.next unless token in { type: :EOF }
           synchronize(tokens)
           return dispatch_missing(location: token.location)
@@ -120,10 +121,10 @@ module Lox
             in :variable
               dispatch_assignment(variable: node.node, value: value.node, location: node.location.to(value.location))
             in :true | :false | :nil
-              errors << Error::SyntaxError.new("Error at '#{node.value.to_lox}': Expect variable name.", node.location)
+              errors << Error::SyntaxError.new("Error at '#{node.value.to_lox}': Expect variable name.", line_number(node.location))
               dispatch_assignment(variable: node.node, value: value.node, location: node.location.to(value.location))
             else
-              errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Invalid assignment target.", token.location)
+              errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Invalid assignment target.", line_number(token.location))
               dispatch_assignment(variable: node.node, value: value.node, location: node.location.to(value.location))
             end
           in { type: :LEFT_PAREN, location: arguments_location }
@@ -140,7 +141,7 @@ module Lox
               end
 
               if exceeding
-                errors << Error::SyntaxError.new("Error at #{exceeding.to_value_s}: Can't have more than 255 arguments.", exceeding.location)
+                errors << Error::SyntaxError.new("Error at #{exceeding.to_value_s}: Can't have more than 255 arguments.", line_number(exceeding.location))
               end
             end
 
@@ -165,13 +166,17 @@ module Lox
     # Parsing helpers
     #---------------------------------------------------------------------------
 
+    def line_number(location)
+      source[0...location.start].count("\n") + 1
+    end
+
     def consume(tokens, type, message)
       peeked = tokens.peek
 
       if peeked in { type: ^type }
         tokens.next
       else
-        errors << Error::SyntaxError.new("Error at #{peeked.to_value_s}: #{message}", peeked.location)
+        errors << Error::SyntaxError.new("Error at #{peeked.to_value_s}: #{message}", line_number(peeked.location))
         AST::Token.new(type: :MISSING, location: peeked.location, value: nil)
       end
     end
@@ -235,7 +240,7 @@ module Lox
         in [_, token]
           # Here we got something that we don't even handle. In this case we'll
           # add an error, enter panic mode, and attempt to synchronize.
-          errors << Error::SyntaxError.new("Error at #{token.to_value_s}: #{message}", token.location)
+          errors << Error::SyntaxError.new("Error at #{token.to_value_s}: #{message}", line_number(token.location))
           synchronize(tokens)
           return
         end
@@ -340,7 +345,7 @@ module Lox
         end
 
         if exceeding
-          errors << Error::SyntaxError.new("Error at #{exceeding.to_value_s}: Can't have more than 255 parameters.", exceeding.location)
+          errors << Error::SyntaxError.new("Error at #{exceeding.to_value_s}: Can't have more than 255 parameters.", line_number(exceeding.location))
         end
       end
       
@@ -360,16 +365,16 @@ module Lox
       keyword = consume(tokens, :VAR, "Expect 'var'.")
 
       if tokens.peek in { type: :FALSE | :NIL | :THIS | :TRUE, location: } => token
-        errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect variable name.", location)
+        errors << Error::SyntaxError.new("Error at #{token.to_value_s}: Expect variable name.", line_number(location))
         synchronize(tokens)
         nil
       else
         identifier = consume(tokens, :IDENTIFIER, "Expect identifier after 'var'.")
-
-        if tokens.peek in { type: :EQUAL }
-          tokens.next
-          initializer = parse_expression(tokens)
-        end
+        initializer =
+          if tokens.peek in { type: :EQUAL }
+            tokens.next
+            parse_expression(tokens)
+          end
 
         semicolon = consume(tokens, :SEMICOLON, "Expect ';' after variable declaration.")
         dispatch_variable_declaration(

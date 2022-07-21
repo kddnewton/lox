@@ -15,7 +15,7 @@ pushd ../craftinginterpreters
 if [ "$SUITE" = "all" ]; then
   # If the "all" suite is specified, we'll run all of the tests by looping
   # through every suite.
-  SUITES=("chap04_scanning" "chap06_parsing" "chap07_evaluating" "chap08_statements" "chap09_control" "chap10_functions" "chap11_resolving" "chap12_classes" "chap13_inheritance" "chap17_compiling" "chap18_types")
+  SUITES=("chap04_scanning" "chap06_parsing" "chap07_evaluating" "chap08_statements" "chap09_control" "chap10_functions" "chap11_resolving" "chap12_classes" "chap13_inheritance" "chap17_compiling" "chap18_types" "chap19_strings" "chap20_hash" "chap21_global")
   for SUITE in ${SUITES[@]}; do
     SUITE=$SUITE dart tool/bin/test.dart $SUITE --interpreter $INTERP
   done

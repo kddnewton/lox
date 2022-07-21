@@ -46,15 +46,16 @@ module Lox
         end
       end
 
-      attr_reader :globals, :environment, :locals, :errors
+      attr_reader :source, :globals, :environment, :locals, :errors
 
-      def initialize
+      def initialize(source)
         variables = {
           "clock" => Type::Function.new(descriptor: "<native fn>", closure: environment) {
             Type::Number.new(value: Time.now.to_i / 1000)
           }
         }
 
+        @source = source
         @globals = @environment = Environment.new(variables: variables)
         @locals = {}
         @errors = []
@@ -110,7 +111,7 @@ module Lox
           visit(node.left) * visit(node.right)
         end
       rescue Error::RuntimeError => error
-        raise Error::RuntimeError.new(error.message, node.operator.location)
+        raise Error::RuntimeError.new(error.message, line_number(node.operator.location))
       end
 
       # Visit a BlockStatement node.
@@ -183,7 +184,7 @@ module Lox
           raise Error::RuntimeError.new("Only instances have properties.", node.location)
         end
 
-        object.get(node.name.value, node.location)
+        object.get(node.name.value, line_number(node.location))
       end
 
       # Visit a Group node.
@@ -267,7 +268,7 @@ module Lox
         in :MINUS then -visit(node.node)
         end
       rescue Error::RuntimeError => error
-        raise Error::RuntimeError.new(error.message, node.operator.location)
+        raise Error::RuntimeError.new(error.message, line_number(node.operator.location))
       end
 
       # Visit a Variable node.
@@ -289,6 +290,10 @@ module Lox
       end
 
       private
+
+      def line_number(location)
+        source[0...location.start].count("\n") + 1
+      end
 
       def create_function(node, is_init:)
         Type::Function.new(

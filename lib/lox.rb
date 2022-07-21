@@ -40,8 +40,8 @@ module Lox
     # source into a tree and then walks it to interpret it. The return value of
     # this function is the exit code of the program.
     def interpret(source)
-      parser = Lox::Parser.new(Lox::Parser::Builder.new)
-      program = parser.parse(source)
+      parser = Lox::Parser.new(source, Lox::Parser::Builder.new)
+      program = parser.parse
       handle_syntax_errors(source, parser.errors)
 
       interpreter = Lox::Visitor::Interpreter.new
@@ -63,8 +63,8 @@ module Lox
     def evaluate(source)
       compiler = Lox::Bytecode::Compiler.new(source)
 
-      parser = Lox::Parser.new(compiler)
-      parser.parse(source)
+      parser = Lox::Parser.new(source, compiler)
+      parser.parse
       handle_syntax_errors(source, parser.errors)
 
       Lox::Bytecode::Interpreter.new(chunk: compiler.chunk).interpret

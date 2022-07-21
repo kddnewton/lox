@@ -58,6 +58,9 @@ module Lox
       def on_group(node:, location:)
       end
 
+      def on_missing(location:)
+      end
+
       def on_nil(location:)
         chunk.op_nil(line_number: line_number(location.start))
       end

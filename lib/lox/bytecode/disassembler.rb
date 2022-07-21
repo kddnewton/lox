@@ -5,7 +5,7 @@ module Lox
   module Bytecode
     # Responsible for visiting a set of instructions and converting them into
     # a disassembled output string.
-    class Dissassembler < Visitor
+    class Disassembler < Visitor
       attr_reader :chunk
 
       def initialize(chunk:)

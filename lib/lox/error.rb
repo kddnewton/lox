@@ -13,18 +13,15 @@ module Lox
     class SyntaxError < Error
       EXIT_CODE = 65
 
-      attr_reader :location
+      attr_reader :line_number
 
-      def initialize(message, location = nil)
+      def initialize(message, line_number = nil)
         super(message)
-        @location = location
+        @line_number = line_number
       end
 
-      def detailed_message(source: nil, **)
-        return super unless source
-
-        lineno = source[0..location.start].count("\n") + 1
-        "[line #{lineno}] #{message}"
+      def detailed_message(**)
+        "[line #{line_number}] #{message}"
       end
     end
 
@@ -32,18 +29,15 @@ module Lox
     class RuntimeError < Error
       EXIT_CODE = 70
 
-      attr_reader :location
+      attr_reader :line_number
 
-      def initialize(message, location = nil)
+      def initialize(message, line_number = nil)
         super(message)
-        @location = location
+        @line_number = line_number
       end
 
-      def detailed_message(source: nil, **)
-        return super unless source
-
-        lineno = source[0..location.start].count("\n") + 1
-        "#{message}\n[line #{lineno}]"
+      def detailed_message(**)
+        "#{message}\n[line #{line_number}]"
       end
     end
   end

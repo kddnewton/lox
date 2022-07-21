@@ -51,6 +51,8 @@ module Lox
     private
 
     def make_tokens(source)
+      line_number = ->(offset) { source[0...offset].count("\n") + 1 }
+
       Enumerator.new do |enum|
         index = 0
   
@@ -67,7 +69,7 @@ module Lox
           in /\A"([^"]*)"?/
             finish = index + $&.length
             unless $&.end_with?("\"")
-              raise Error::SyntaxError.new("Error: Unterminated string.", AST::Location.new(start: index, finish: finish))
+              raise Error::SyntaxError.new("Error: Unterminated string.", line_number[index])
             end
 
             enum << AST::Token.new(
@@ -89,8 +91,7 @@ module Lox
               value: $&
             )
           in /\A./
-            location = AST::Location.new(start: index, finish: index + 1)
-            report.errors << Error::SyntaxError.new("Error: Unexpected character.", location)
+            report.errors << Error::SyntaxError.new("Error: Unexpected character.", line_number[index])
           end
   
           index += $&.length
