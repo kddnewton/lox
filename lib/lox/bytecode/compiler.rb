@@ -14,8 +14,7 @@ module Lox
       end
 
       def on_assignment(variable:, value:, location:)
-        instruction = Instructions::OpSetGlobal.new
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
+        chunk.op_set_global(line_number: line_number(location.start))
       end
 
       def on_binary(left:, operator:, right:, location:)
@@ -23,111 +22,89 @@ module Lox
 
         case operator
         in { type: :PLUS }
-          chunk.push_instruction(instruction: Instructions::OpAdd.new, line_number:)
+          chunk.op_add(line_number:)
         in { type: :MINUS }
-          chunk.push_instruction(instruction: Instructions::OpSubtract.new, line_number:)
+          chunk.op_subtract(line_number:)
         in { type: :STAR }
-          chunk.push_instruction(instruction: Instructions::OpMultiply.new, line_number:)
+          chunk.op_multiply(line_number:)
         in { type: :SLASH }
-          chunk.push_instruction(instruction: Instructions::OpDivide.new, line_number:)
+          chunk.op_divide(line_number:)
         in { type: :BANG_EQUAL }
-          chunk.push_instruction(instruction: Instructions::OpEqual.new, line_number:)
-          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number:)
+          chunk.op_equal(line_number:)
+          chunk.op_not(line_number:)
         in { type: :EQUAL_EQUAL }
-          chunk.push_instruction(instruction: Instructions::OpEqual.new, line_number:)
+          chunk.op_equal(line_number:)
         in { type: :GREATER }
-          chunk.push_instruction(instruction: Instructions::OpGreater.new, line_number:)
+          chunk.op_greater(line_number:)
         in { type: :GREATER_EQUAL }
-          chunk.push_instruction(instruction: Instructions::OpLess.new, line_number:)
-          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number:)
+          chunk.op_less(line_number:)
+          chunk.op_not(line_number:)
         in { type: :LESS }
-          chunk.push_instruction(instruction: Instructions::OpLess.new, line_number:)
+          chunk.op_less(line_number:)
         in { type: :LESS_EQUAL }
-          chunk.push_instruction(instruction: Instructions::OpGreater.new, line_number:)
-          chunk.push_instruction(instruction: Instructions::OpNot.new, line_number:)
+          chunk.op_greater(line_number:)
+          chunk.op_not(line_number:)
         end
       end
 
       def on_expression_statement(value:, location:)
-        instruction = Instructions::OpPop.new
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
+        chunk.op_pop(line_number: line_number(location.start))
       end
 
       def on_false(location:)
-        instruction = Instructions::OpFalse.new
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
+        chunk.op_false(line_number: line_number(location.start))
       end
 
       def on_group(node:, location:)
       end
 
       def on_nil(location:)
-        instruction = Instructions::OpNil.new
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
+        chunk.op_nil(line_number: line_number(location.start))
       end
 
       def on_number(value:, location:)
-        instruction = Instructions::OpConstant.new(index: chunk.constants.size)
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
-        chunk.constants << Type::Number.new(value: value)
+        chunk.op_constant(constant: Type::Number.new(value: value), line_number: line_number(location.start))
       end
 
       def on_print_statement(value:, location:)
-        instruction = Instructions::OpPrint.new
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
+        chunk.op_print(line_number: line_number(location.start))
       end
 
       def on_program(statements:, location:)
-        instruction = Instructions::OpReturn.new
-        chunk.push_instruction(instruction:, line_number: line_number(location.finish))
+        chunk.op_return(line_number: line_number(location.start))
       end
 
       def on_string(value:, location:)
-        instruction = Instructions::OpConstant.new(index: chunk.constants.size)
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
-        chunk.constants << Type::String.new(value: value)
+        chunk.op_constant(constant: Type::String.new(value: value), line_number: line_number(location.start))
       end
 
       def on_true(location:)
-        instruction = Instructions::OpTrue.new
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
+        chunk.op_true(line_number: line_number(location.start))
       end
 
       def on_unary_expression(operator:, node:, location:)
-        instruction =
-          case operator
-          in { type: :BANG }
-            Instructions::OpNot.new
-          in { type: :MINUS }
-            Instructions::OpNegate.new
-          end
+        line_number = line_number(location.start)
 
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
+        case operator
+        in { type: :BANG }
+          chunk.op_not(line_number:)
+        in { type: :MINUS }
+          chunk.op_negate(line_number:)
+        end
       end
 
       def on_variable(name:, location:)
-        instruction = Instructions::OpConstant.new(index: chunk.constants.size)
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
-        chunk.constants << Type::String.new(value: name)
+        chunk.op_constant(constant: Type::String.new(value: name), line_number: line_number(location.start))
 
         unless Lexer.new(source[location.start..]).tokens.take(2).last in { type: :EQUAL }
-          instruction = Instructions::OpGetGlobal.new
-          chunk.push_instruction(instruction:, line_number: line_number(location.start))
+          chunk.op_get_global(line_number: line_number(location.start))
         end
       end
 
       def on_variable_declaration(name:, initializer:, location:)
-        unless initializer
-          instruction = Instructions::OpNil.new
-          chunk.push_instruction(instruction:, line_number: line_number(location.start))
-        end
-
-        instruction = Instructions::OpConstant.new(index: chunk.constants.size)
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
-        chunk.constants << Type::String.new(value: name)
-
-        instruction = Instructions::OpDefineGlobal.new
-        chunk.push_instruction(instruction:, line_number: line_number(location.start))
+        chunk.op_nil(line_number: line_number(location.start)) unless initializer
+        chunk.op_constant(constant: Type::String.new(value: name), line_number: line_number(location.start))
+        chunk.op_define_global(line_number: line_number(location.start))
       end
 
       private
