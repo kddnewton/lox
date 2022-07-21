@@ -101,7 +101,7 @@ module Lox
         AST::Unary.new(operator:, node:, location:)
       end
 
-      def on_variable(name:, location:)
+      def on_variable(name:, next_token:, location:)
         AST::Variable.new(name:, location:)
       end
 

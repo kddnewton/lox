@@ -93,12 +93,9 @@ module Lox
         end
       end
 
-      def on_variable(name:, location:)
+      def on_variable(name:, next_token:, location:)
         chunk.op_constant(constant: Type::String.new(value: name), line_number: line_number(location.start))
-
-        unless Lexer.new(source[location.start..]).tokens.take(2).last in { type: :EQUAL }
-          chunk.op_get_global(line_number: line_number(location.start))
-        end
+        chunk.op_get_global(line_number: line_number(location.start)) unless next_token in { type: :EQUAL }
       end
 
       def on_variable_declaration(name:, initializer:, location:)

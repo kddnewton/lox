@@ -90,7 +90,7 @@ module Lox
           dispatch_this_expression(location:)
         in { type: :IDENTIFIER, value: name, location: }
           tokens.next
-          dispatch_variable(name:, location:)
+          dispatch_variable(name:, next_token: tokens.peek, location:)
         in { type: :SUPER, location: }
           tokens.next
           if consume(tokens, :DOT, "Expect '.' after 'super'.") in { type: :MISSING }
@@ -303,7 +303,7 @@ module Lox
             synchronize(tokens, :LEFT_BRACE)
             nil
           else
-            dispatch_variable(name: supername.value, location: supername.location)
+            dispatch_variable(name: supername.value, next_token: tokens.peek, location: supername.location)
           end
         end
 
@@ -684,8 +684,8 @@ module Lox
       DispatchResult.new(type: :unary_expression, node:, location:)
     end
 
-    def dispatch_variable(name:, location:)
-      node = builder.on_variable(name:, location:)
+    def dispatch_variable(name:, next_token:, location:)
+      node = builder.on_variable(name:, next_token:, location:)
       DispatchResult.new(type: :variable, node:, location:)
     end
 

@@ -34,10 +34,10 @@ in "chap17_compiling" | "chap18_types"
   compiler = Lox::Bytecode::Compiler.new(source)
   Lox::Parser.new(compiler).parse_expression(Lox::Lexer.new(source))
 
-  evaluator = Lox::Bytecode::Evaluator.new(chunk: compiler.chunk)
-  evaluator.evaluate
+  interpreter = Lox::Bytecode::Interpreter.new(chunk: compiler.chunk)
+  interpreter.interpret
 
-  puts evaluator.stack[0].to_lox
+  puts interpreter.stack[0].to_lox
 else
   # exit Lox.interpret(source)
   exit Lox.evaluate(source)
